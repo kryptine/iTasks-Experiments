@@ -1,0 +1,29 @@
+Bring up to date...
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Patches/Dynamics'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Patches/Generics'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Patches/Platform/OS-Independent'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Patches/StdEnv'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Patches/TCPIP'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Server'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Dependencies/Platform/OS-Independent'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Dependencies/Platform/OS-Independent/Deprecated/StdLib'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Dependencies/Platform/OS-Posix'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Dependencies/Platform/OS-Mac'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Dependencies/graph_copy'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Dependencies/SAPL'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/iTasks-SDK/Server/lib'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/StdEnv'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/Generics'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/Dynamics'.
+Warning: Unable to setup directory cache: '/Users/norm2782/clean/lib/iTasks-SDK/Experiments/Tonic/lib/TCPIP'.
+Compiling...
+Analyzing 'examples'. 
+[examples.icl,]: no abc file
+Compiling 'examples'.
+Error : _SystemDynamic.dcl could not be imported
+Error [examples.icl,3]: StdArray.dcl could not be imported
+Error [examples.icl,4]: iTasks.dcl could not be imported
+Error [examples.icl,6]: iTasks.API.Extensions.Admin.TonicAdmin.dcl could not be imported
+Error [examples.icl,79]: iTasks.API.Extensions.GIS.GoogleMap.dcl could not be imported
+Linking...
+Finished making.
