@@ -8,8 +8,9 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 import StdArray
 
 Start :: *World -> *World
-Start world = startEngine [ publish "/" (WebApp []) (\_-> dynamicBPs1 (viewStep 42))
+Start world = startEngine [ publish "/" (WebApp []) (\_-> futureConditionals)
                           , publish "/tonic" (WebApp []) (\_-> tonicDashboard [])
+                          , publish "/dynamicBPs" (WebApp []) (\_-> dynamicBPs1 (viewStep 42))
                           , publish "/test" (WebApp []) (\_-> test 5)	
 
                           , publish "/view" (WebApp []) (\_-> viewStep 5)	
@@ -133,6 +134,22 @@ do task
  >>= \res ->	viewInformation "result is:" [] res
  >>|			return res
 
+
+simplefutureConditionals :: Int -> Task String
+simplefutureConditionals num
+  =   viewInformation "You have entered" [] num
+  >>| if (num < 42)
+        (viewInformation "Not so high" [] (toString num +++ " is less than 42"))
+        (viewInformation "It's alright" [] (toString num +++ " is greater than or equal to 42"))
+
+futureConditionals :: Task String
+futureConditionals
+  =           enterInformation "Enter a number" []
+  >>= \num -> viewInformation "You have entered" [] num
+  >>|         if (num < 42)
+                (viewInformation "Not so high" [] (toString num +++ " is less than 42"))
+                (viewInformation "It's alright" [] (toString num +++ " is greater than or equal to 42"))
+
 /**
  * FOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
  */
@@ -140,8 +157,8 @@ do task
 dynamicBPs1 :: (Task Int) -> Task Int
 dynamicBPs1 vs42
   =   viewStep 1
-  >>| if True (viewStep 14) (viewStep 15)
-  >>| viewStep 10
+  //>>| if True (viewStep 14) (viewStep 15)
+  //>>| viewStep 10
   >>| (      viewStep 11
        -&&- (viewStep 12 >>| viewStep 13))
   >>| viewStep 2
@@ -149,7 +166,8 @@ dynamicBPs1 vs42
   >>| viewStep 3
   >>| allTasks restOfSteps
   >>| viewStep 8
-  //>>| viewStep 9
+  >>| vs42
+  >>| viewStep 9
   where
   restOfSteps = map viewStep [4, 5, 6, 7]
   
