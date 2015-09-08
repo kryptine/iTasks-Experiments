@@ -1,10 +1,10 @@
 default:
-	cpm DynamicBPs.prj
+	cpm IFL15.prj
 
 force:
-	cpm DynamicBPs.prj --force
+	cpm IFL15.prj --force
 
 clean:
-	rm -rf sapl Clean\ System\ Files DynamicBPs.exe DynamicBPs-data
+	rm -rf sapl Clean\ System\ Files IFL15 IFL15-data
 
 .PHONY: clean
