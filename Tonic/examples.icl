@@ -3,7 +3,7 @@ module examples
 import StdArray
 import iTasks
  
-import iTasks.API.Extensions.Admin.TonicAdmin
+import iTasks.API.Extensions.Admin.TonicAdmin 
 
 // You need to have or to make an "example.prj" file (
 // If it is not avaialble, open and select examples.icl, the choose "File/New Project ..." in the Clean IDE
