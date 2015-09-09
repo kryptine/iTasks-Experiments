@@ -63,8 +63,8 @@ areAllAvailable  wantFrom resources
 		  | wantFrom res > 0
 		  ]
 
-wantAll :: TaskId (ResourceClaim r) [Resource r] -> [Resource r]
-wantAll taskId wantFrom resources 
+reserveAll :: TaskId (ResourceClaim r) [Resource r] -> [Resource r]
+reserveAll taskId wantFrom resources 
 	= 	[   let claim = wantFrom resource in
 		{ name		= name
 		, kind		= kind
@@ -76,14 +76,16 @@ wantAll taskId wantFrom resources
 
 refundAll :: TaskId (ResourceClaim r) [Resource r] -> [Resource r]
 refundAll taskId wantFrom resources 
-	= 	[   let claim = wantFrom resource in
+	= 	[   
 		{ name		= name
 		, kind		= kind
-		, available = case kind of 	Reusable 	-> available + claim
+		, available = case kind of 	Reusable 	-> available + case [amount \\ (id,amount) <- inUse | id == taskId] of
+																[amount:_] -> amount
+																_		   -> 0
 									Consumable	-> available 
 		, inUse 	= [(id,used) \\ (id,used) <- inUse | id <> taskId]
 		} 
-		\\ resource=:{name,kind,available,inUse} <- resources 
+		\\ resource=:{name,kind,available,inUse} <- resources
 		]
 
 // tasks
@@ -101,7 +103,7 @@ refundAll taskId wantFrom resources
 useResource :: (ResourceClaim r) (Resources r) (Task a) -> Task a | iTask a & iTask r
 useResource requests resources task
 	=					withTaskId (return ())
-	>>= \(_,taskId) ->	upd (wantAll taskId requests) resources
+	>>= \(_,taskId) ->	upd (reserveAll taskId requests) resources
 	>>|					task
 	>>= \result ->		upd (refundAll taskId requests) resources
 	>>|					return result
