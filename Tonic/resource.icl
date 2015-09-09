@@ -5,7 +5,6 @@ import iTasks
  
 import iTasks.API.Extensions.Admin.TonicAdmin 
 
-:: Resources r		:== Shared [Resource r]
 :: Resource r		=	{ kind		:: ResourceKind
 						, name		:: r
 						, available :: Amount
@@ -13,7 +12,7 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 						}
 :: ResourceKind 	= 	Consumable | Reusable
 :: Amount			:== Int
-:: ResourceClaim r	:== ((Resource r) -> Amount)	
+:: ResourceClaim r	:== ((Resource r) -> Amount, [Resource r] -> [Resource r])
 
 derive class iTask Resource, ResourceKind
 derive gText (,,,,,)
@@ -37,45 +36,55 @@ where
 							)
 
 mkDemandTable :: (ResourceClaim r) [Resource r] -> Table | iTask r
-mkDemandTable request resources
+mkDemandTable (claim, check) resources
 	 = Table mkHeader tags Nothing
 where
 	mkHeader  			= ["Demanded","Available?","Resource Name","Kind","Available","In Use"]
 	(Table _ tags _)	= toTable 
 							(sortBy (\(_,_,id1,_,_,_) (_,_,id2,_,_,_) ->  id1 <  id2)
-								[	( request res
-									, if (available >= request res) "Yes" "No"
+								[	( claim res
+									, if (available >= claim res) "Yes" "No"
 									, toSingleLineText name
 									, toSingleLineText kind
 									, res.available 
 									, [("(",t,".",i,"):",amount) \\ (TaskId t i,amount) <-  inUse]
 									) 
-								\\ res=:{name,kind,available,inUse} <- resources | request res > 0 
+								\\ res=:{name,kind,available,inUse} <- selectResources (claim, check) resources
 								]
 							)
 
 // functions on resources
 
 areAllAvailable :: (ResourceClaim r) [Resource r] -> Bool
-areAllAvailable  wantFrom resources 
-	= and [ res.available >= wantFrom res
-		  \\ res <- resources 
-		  | wantFrom res > 0
-		  ]
+areAllAvailable (claim, filter) resources 
+	= case [res.available >= claim res \\ res <- selectResources (claim, filter) resources] of
+		[] -> False
+		else -> and else
 
-reserveAll :: TaskId (ResourceClaim r) [Resource r] -> [Resource r]
-reserveAll taskId wantFrom resources 
-	= 	[   let claim = wantFrom resource in
+selectResources :: (ResourceClaim r) [Resource r] -> [Resource r]
+selectResources (claim, filter) resources 
+	= filter [res \\ res <- resources | claim res > 0]
+
+reserveAll :: TaskId (ResourceClaim r) [Resource r] -> [Resource r] | iTask r
+reserveAll taskId (claim, filter) resources 
+	= 	[ let amount = claim resource in
 		{ name		= name
 		, kind		= kind
-		, available = available - claim
-		, inUse 	= if (claim > 0) [(taskId,claim):inUse] inUse
+		, available = available - amount
+		, inUse 	= if (amount > 0) [(taskId,amount):inUse] inUse
 		} 
-		\\ resource=:{name,kind,available,inUse} <- resources 
-		]
+		\\ resource=:{name,kind,available,inUse} <- selected
+		] 
+		++
+		removeDups selected resources
+where
+	selected = selectResources (claim, filter) resources
 
-refundAll :: TaskId (ResourceClaim r) [Resource r] -> [Resource r]
-refundAll taskId wantFrom resources 
+	removeDups [] resources 	= resources
+	removeDups [r:rs] resources = removeDups rs [res \\ res <- resources | r.Resource.name =!= res.Resource.name]	
+
+refundAll :: TaskId [Resource r] -> [Resource r]
+refundAll taskId resources 
 	= 	[   
 		{ name		= name
 		, kind		= kind
@@ -90,7 +99,7 @@ refundAll taskId wantFrom resources
 
 // tasks
 
-(?:) infix 3 ::  (ResourceClaim r,Resources r) (String,Task a) -> Task a | iTask a & iTask r 
+(?:) infix 3 ::  (ResourceClaim r,Shared [Resource r]) (String,Task a) -> Task a | iTask a & iTask r 
 (?:) (requests,resources) (prompt,task)
  	=						viewSharedInformation prompt
  								[ViewWith (mkDemandTable requests) ] resources
@@ -100,20 +109,20 @@ refundAll taskId wantFrom resources
 				)
 			]
 
-useResource :: (ResourceClaim r) (Resources r) (Task a) -> Task a | iTask a & iTask r
+useResource :: (ResourceClaim r) (Shared [Resource r]) (Task a) -> Task a | iTask a & iTask r
 useResource requests resources task
 	=					withTaskId (return ())
 	>>= \(_,taskId) ->	upd (reserveAll taskId requests) resources
 	>>|					task
-	>>= \result ->		upd (refundAll taskId requests) resources
+	>>= \result ->		upd (refundAll taskId) resources
 	>>|					return result
 
 
-showResources :: (Resources r) ->  Task [Resource r] | iTask r 
+showResources :: (Shared [Resource r]) ->  Task [Resource r] | iTask r 
 showResources resources
 	=	viewSharedInformation "Available Resources" [ViewWith mkResourceTable] resources
 
-alterResources :: (Resources r) ->  Task [Resource r] | iTask r
+alterResources :: (Shared [Resource r]) ->  Task [Resource r] | iTask r
 alterResources resources
 	=	updateSharedInformation "Alter Resources" [] resources
 

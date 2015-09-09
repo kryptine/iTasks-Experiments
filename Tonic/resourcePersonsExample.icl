@@ -13,7 +13,9 @@ Start world
         , publish "/tonic" (WebApp []) (\_-> tonicDashboard [])
         ] world
 
-:: Crew		=	{	userTitle	:: UserTitle
+// here follow my resources
+
+:: Crew		=	{	userTitle	:: UserTitle	// user whom I can assign a task to
 				,	role		:: OneRole
 				,	location	:: Location
 				}
@@ -22,6 +24,8 @@ Start world
 
 derive class iTask Crew, Location, OneRole
 
+// define the crew members and the role they can have
+
 sailorAlice		= {userTitle = "alice",	role = Sailor, 		location = OnShip}
 cookAlice		= {userTitle = "alice",	role = ShipsCook, 	location = OnShip}
 captainBob 		= {userTitle = "bob",	role = Captain, 	location = OnShip}
@@ -29,7 +33,7 @@ sailorCarol		= {userTitle = "carol",	role = Sailor, 		location = OnShip}
 sailorDave		= {userTitle = "dave",	role = Sailor, 		location = NotOnShip}
 sailorEdward	= {userTitle = "edward",role = Sailor, 		location = OnShip}
 
-myCrew :: (Resources Crew) 					// initialize crew
+myCrew :: (Shared [Resource Crew]) 					// initialize crew database, 100 means available 100% of the time
 myCrew = sharedStore "myResources" initResources
 where
 	initResources = [{name = captainBob,	kind = Reusable, 	available = 100	, inUse = []} // In percentage 
@@ -41,8 +45,24 @@ where
 					]	
 
 wantSailor :: Int (Resource Crew) -> Amount
-wantSailor needed {Resource|name = {role = Sailor, location = OnShip} , available } = if (available >= needed) needed 0 // % of the sailors time
+wantSailor needed {Resource|name = {role = Sailor, location = OnShip}  } =  needed  // % of the sailors time
 wantSailor _ _ = 0
+
+wantAvailableSailor :: Int (Resource Crew) -> Amount
+wantAvailableSailor needed {Resource|name = {role = Sailor, location = OnShip} , available } =  if (available >= needed) needed 0  // % of the sailors time
+wantAvailableSailor _ _ = 0
+
+wantCook :: Int (Resource Crew) -> Amount
+wantCook needed {Resource|name = {role = ShipsCook, location = OnShip} , available } = needed
+wantCook _ _ = 0
+
+wantAlice :: (Resource Crew) -> Amount
+wantAlice {Resource|name = {userTitle = "alice",role = Sailor, location = OnShip} , available, inUse } 	   = foldl (+) available (map snd inUse)
+wantAlice {Resource|name = {userTitle = "alice",role = ShipsCook, location = OnShip} , available, inUse }  = foldl (+) available (map snd inUse)
+wantAlice _ = 0
+
+hds [r:rs] = [r]
+hds _ = []
 
 // tasks
 
@@ -52,8 +72,11 @@ myExamples = 	[ workflow "resource" 				"resource"  						test
 				, workflow "Manage users" 			"Manage system users..." 			manageUsers
 			 	]
 		
-test = forever ((wantSailor 20,myCrew) ?: ("need a sailor",showIt "sailor request 1" "sail 1")) -&&-
-	   forever ((wantSailor 50,myCrew) ?: ("need a sailor",showIt "sailor request 2" "sail 2")) -&&-
+test = forever (((wantSailor 20,id),myCrew) 			?: ("need all sailors",showIt "sailor request 1" "sail 1")) -&&-
+	   forever (((wantAvailableSailor 60,hds),myCrew) 	?: ("need one sailor",showIt "sailor request 2" "sail 2")) -&&-
+	   forever (((wantAvailableSailor 60,id),myCrew)    ?: ("need all available sailors",showIt "sailor request 3" "sail 3")) -&&-
+	   forever (((wantCook 40,id),myCrew)    			?: ("need a cook",showIt "cook request" "cook")) -&&-
+	   forever (((wantAlice,id),myCrew)    				?: ("need alice",showIt "alice request" "alice")) -&&-
 	   showResources myCrew -&&-
 	   alterResources myCrew
 

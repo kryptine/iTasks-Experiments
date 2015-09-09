@@ -50,8 +50,8 @@ wantDE {Resource|name = Sugar} = 2
 wantDE {Resource|name = Milk} = 2
 wantDE _ = 0
 		
-test = forever ((wantStarBucks,myResources) ?: ("drink coffee",showIt "coffee request" "coffee")) -&&-
-	   forever ((wantStarBucks,myResources) ?: ("drink coffee",showIt "coffee request" "coffee")) -&&-
+test = forever (((wantStarBucks,id),myResources)	?: ("drink coffee",showIt "coffee request" "coffee")) -&&-
+	   forever (((wantDE,id),myResources)			?: ("drink tea",showIt "tea request" "tea")) -&&-
 	   showResources myResources -&&-
 	   alterResources myResources
 
