@@ -3,6 +3,7 @@ module examples
 import StdArray
 import iTasks
  
+import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
 
 // You need to have or to make an "example.prj" file (
