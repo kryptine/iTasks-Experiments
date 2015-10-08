@@ -41,13 +41,15 @@ myExamples = 	[	workflow "give instructions"			"give instructions to a worker" 	
 				|	Down Int
 :: Actor		=	{ userName	:: User
 					, carrying	:: [Object]
+					, status	:: ActorStatus
 					}
+:: ActorStatus	= Available | NotAvailable | NormalTask | UrgentTask | VeryUrgentTask 
 :: Floor		:==	[[Room]]
 :: MAP			:== [Floor]
 
-derive class iTask Room, RoomStatus, Detector, Object, Exit, Actor
+derive class iTask Room, RoomStatus, Detector, Object, Exit, Actor, ActorStatus
 
-// utility functions 
+// small utility functions 
 
 instance == Object where (==) o1 o2 = o1 === o2
 instance == Actor  where (==) a1 a2 = a1.userName == a2.userName
@@ -60,11 +62,7 @@ fromExit (West i) = i
 fromExit (Up i) = i
 fromExit (Down i) = i
 
-updMap :: Int (Room -> Room) MAP -> MAP 
-updMap i upd [] 	  			= []
-updMap i upd [floor:floors]   	= [[map updateRoom rooms \\ rooms <- floor]: updMap i upd floors]
-where
-	updateRoom room = if (i == room.number) (upd room)  room
+// utility functions on Room
 
 leaving :: Actor Room -> Room
 leaving actor room = {room & present = removeMember actor room.present}
@@ -78,8 +76,39 @@ fetchObject actor object room = {room & inventory = removeMember object room.inv
 dropObject :: Actor Object Room -> Room
 dropObject actor object room = {room & inventory = [object:room.inventory]}
 
-adjustActor :: Actor Room -> Room
-adjustActor actor room = {room & present = [actor:removeMember actor room.present]}
+updateActor :: Actor Room -> Room
+updateActor actor room = {room & present = [actor:removeMember actor room.present]}
+
+// tasks on Room
+
+updateRoom :: Int (Room -> Room) -> Task ()
+updateRoom roomNumber updRoom = upd (updateRoom` roomNumber updRoom) myMap >>| return ()
+where 
+	updateRoom` :: Int (Room -> Room) MAP -> MAP 
+	updateRoom` i upd [] 	  			= []
+	updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
+	where
+		updateThisRoom room = if (i == room.number) (upd room)  room
+
+
+findRoom :: Actor -> Task Room
+findRoom actor 
+	= 				get myMap 
+		>>= \map -> case (myRoom actor map) of
+						[] 		-> 		askPosition actor.userName  					// not administrated yet, add it
+									>>| findRoom actor
+						rooms   -> 		return (hd rooms)
+
+myRoom :: Actor MAP -> [Room]
+myRoom actor map = 	[ room 
+					\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.present 
+					| actor.userName == userName
+					] 
+
+findAllActors :: MAP ->  [(Int,Actor)]
+findAllActors map =	[ (room.number,actor)
+					\\ floor <- map, layer <- floor, room <- layer, actor <- room.present 
+					]
 
 // defining a map as example
 
@@ -97,65 +126,17 @@ where
 	room5		= {name = "room 5",   number = 6, status = Normal, inventory = [], exits = [North 4], present = []}			
 	room6		= {name = "room 6",   number = 7, status = Normal, inventory = [FireExtinguisher], exits = [North 4], present = []}
 
-// setting up a simple resource 
 
-:: Resource =	{ acting	:: Actor
-				, status	:: ResourceStatus
-				}
-:: ResourceStatus	= Available | NotAvailable | NormalTask | UrgentTask | VeryUrgentTask 
 
-instance == Resource
-where
-	(==) r1 r2 = r1.Resource.acting.userName == r2.Resource.acting.userName 
-
-myResources :: Shared [Resource]
-myResources = sharedStore "myResource" []
-
-updateResources :: Actor ResourceStatus -> Task Actor 
-updateResources actor status 
-	= upd updateResource myResources >>| return actor
-where
-	updateResource :: [Resource] -> [Resource]
-	updateResource resources
-	 =  if (isMember thisResource resources) (updatedResources resources) [thisResource:resources]
-	 
-	updatedResources :: [Resource] -> [Resource]
-	updatedResources resources 
-	 = [if (resource.acting.userName == actor.userName) thisResource resource \\ resource <- resources] // update administration
-
-	thisResource :: Resource
-	thisResource = {acting = actor, status = status}
-
-derive class iTask Resource, ResourceStatus
 			
 // tasks
 
 showMap = 		viewSharedInformation "map status:" [] myMap 
-				-&&-
-				viewSharedInformation "resource status:" [] myResources
-
-updateMap :: Int (Room -> Room) -> Task ()
-updateMap roomNumber updRoom = upd (updMap roomNumber updRoom) myMap >>| return ()
- 
-getRoom :: User -> Task Room
-getRoom user 
-	= 				get myMap 
-		>>= \map -> case (myRoom user map) of
-						[] 		-> 		askPosition user  					// not administrated yet, add it
-									>>| getRoom user
-						rooms   -> 		return (hd rooms)
-
-myRoom user map = 	[ room 
-					\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.present 
-					| user == userName
-					] 
 
 askPosition :: User  -> Task Int
 askPosition user 
-	=							enterInformation "in which room number are you currently located?" [] 
-		>>= \location ->		enterChoice "what is your status?" [] [Available,NotAvailable, NormalTask,UrgentTask,VeryUrgentTask]
-		>>= \availability ->	updateMap location (entering {userName = user, carrying = []})
-		>>|						updateResources {userName = user, carrying = []} availability
+	=							enterInformation "You are lost! What is your location? " [] 
+		>>= \location ->		updateRoom location (entering {userName = user, carrying = [], status = defaultValue})
 		>>|						return location
 
 :: Instruction  = Goto 		Int 
@@ -167,64 +148,45 @@ askPosition user
 
 derive class iTask Instruction
 
-followInstructions :: User ResourceStatus [Instruction] -> Task ()
-followInstructions me status [] = return ()
-followInstructions me status todo 
-	=				updateResources {userName = me, carrying = []} status
-	 >>= \actor ->	doInstructions actor todo
-	 >>= \actor ->	updateResources actor Available
-	 >>|			return ()
-
+followInstructions :: Actor [Instruction] -> Task ()
+followInstructions _ [] 		= return ()
+followInstructions actor todo 	= doInstructions actor todo >>| return ()
 
 doInstructions :: Actor [Instruction] -> Task Actor
 doInstructions actor [] = return actor
 doInstructions actor todo=:[instruction:rest]
-	= 					getRoom actor.userName
-		>>= \room ->	viewSharedInformation "my room" [ViewWith (myRoom actor.userName)] myMap
+	= 					findRoom actor
+		>>= \room ->	viewSharedInformation "my room" [ViewWith (myRoom actor)] myMap
 		>>*				[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move actor room.number (fromExit exit)))
 						\\ exit <- room.exits
 						]
 						++ 
-						[ OnAction (Action ("Fetch " <+++ x) [])  	(always (		updateMap room.number (fetchObject actor x)
-																				>>| let nactor = {actor & carrying = [x:actor.carrying]} in
-																						(updateMap room.number (adjustActor nactor) >>| return nactor)
-																			) ) 
-						\\ x <- room.inventory
+						[ OnAction (Action ("Fetch " <+++ object) [])  	(always (pickupObject actor room object))
+						\\ object <- room.inventory
 						]
 						++
-						[ OnAction (Action ("Drop " <+++ x) [])  	(always (		updateMap room.number (dropObject actor x)
-																				>>| let nactor = {actor & carrying = removeMember x actor.carrying} in
-																					   (updateMap room.number (adjustActor nactor) >>| return nactor)
-																			 ) )
-						\\ x <- actor.carrying
+						[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject actor room object))
+						\\ object <- actor.carrying
 						]
 		>>= \actor ->	doInstructions actor todo
 
-/*
-doInstructions :: User [Instruction] -> Task ()
-doInstructions me [] = return ()
-doInstructions me todo=:[instruction:rest]
-	= 					viewSharedInformation "my room" [ViewWith (myRoom me)] myMap
-		>>|				getRoom me
-		>>= \room ->	case instruction of 
-							(Goto i) -> if (room.number == i) 			(doInstructions me rest)
-															  			(move me todo room)
-							(Fetch x) -> if (isMember x room.inventory) (		updateMap room.number (fetchObject me x)
-																		 >>|	doInstructions me rest
-																		 )
-															  			(move me todo room)
-							(Drop x) ->  (		updateMap room.number (dropObject me x)
-											>>|	doInstructions me rest
-										 )
-							_		 -> return ()
+pickupObject actor room object
+	=				updateRoom room.number (fetchObject actor object)
+	>>|				return {actor & carrying = [object:actor.carrying]}
+	>>= \actor ->	updateRoom room.number (updateActor actor)
+	>>| 			return actor
 
-*/
+dropDownObject actor room object
+	=				updateRoom room.number (dropObject actor object)
+	>>|				return {actor & carrying = removeMember object actor.carrying}
+	>>= \actor ->	updateRoom room.number (updateActor actor) 
+	>>| 			return actor
 
 move :: Actor Int Int -> Task Actor
 move actor fromRoom toRoom
 	= 				
-	  			 	updateMap fromRoom (leaving actor)
-	  	>>| 		updateMap toRoom (entering actor)
+	  			 	updateRoom fromRoom (leaving actor)
+	  	>>| 		updateRoom toRoom (entering actor)
 		>>|			return actor
 
 showInstruction :: Room [Instruction] -> Task ()
@@ -240,13 +202,19 @@ showInstruction room todo
 giveInstructions :: Task ()
 giveInstructions 
 	= forever
-	  (		(	(enterInformation "Define Instructions" [] 
-				-&&-
-				enterChoiceWithShared "Assign worker" [] myResources)
-				-&&-
-				enterChoice "Assign Urgency" [] [NormalTask,UrgentTask,VeryUrgentTask] 
-			)
-	 >>* 	[ OnAction  ActionOk     (hasValue (\((todo,resource),urgency) -> appendTopLevelTaskFor resource.acting.userName False (followInstructions resource.acting.userName urgency todo) >>| return ()))
+	  (				get myMap
+	   >>= \map -> (	(enterInformation "Define Instructions" [] 
+						-&&-
+						enterChoice "Assign worker" [] (findAllActors map))
+						-&&-
+						enterChoice "Assign Status" [] [NormalTask,UrgentTask,VeryUrgentTask] 
+					)
+	  >>* 	[ OnAction  ActionOk     (hasValue (\((todo,(roomNumber,actor)),status) 
+	 									-> 			updateRoom roomNumber (updateActor {actor & Actor.status = status})
+	 										>>|		appendTopLevelTaskFor actor.userName False (followInstructions actor todo) 
+	 										>>| 	return ()
+	 											)
+	 								 )
             , OnAction  ActionCancel (always (return ()))
             ]
 	 )
