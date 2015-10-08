@@ -8,24 +8,11 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 
 import StdMisc
 
-Start :: *World -> *World
-Start world 
-    = startEngine 
-    	[ publish "/"      (WebApp []) (\_-> importDemoUsersFlow >>| loginAndManageWorkList "Adventure" myExamples)
-        , publish "/tonic" (WebApp []) (\_-> tonicDashboard [])
-		, publish "/map"   (WebApp []) (\_-> showMap)
-        ] world
- 
-myExamples :: [Workflow]
-myExamples = 	[	workflow "give instructions"			"give instructions to a worker" 		giveInstructions			
-				,	workflow "administrate as present"		"tell where you are currently located"  (get currentUser >>= \me -> askPosition me)
-			 	]
-
 :: Room roomStatus object actorStatus
 				=	{ name		 :: String
 					, number 	 :: Int
 					, exits		 :: [Exit]
-					, status	 :: roomStatus
+					, rstatus	 :: roomStatus
 					, inventory	 :: [object]
 					, actors	 :: [Actor object actorStatus]
 					}
@@ -37,7 +24,7 @@ myExamples = 	[	workflow "give instructions"			"give instructions to a worker" 	
 				|	Down Int
 :: Actor o a	=	{ userName	:: User
 					, carrying	:: [o]
-					, status	:: a
+					, astatus	:: a
 					}
 :: Floor r o a	:==	[[Room r o a]]
 :: MAP r o a	:== [Floor r o a]
@@ -92,11 +79,11 @@ findAllActors map =	[ (room.number,actor)
 
 :: UserActions r o a :== (Room r o a) (Actor o a) -> [TaskCont (Room r o a) (Task (Actor o a))]
 
-moveAround :: (Actor o a) (UserActions r o a) (Shared (MAP r o a)) -> Task (Actor o a) | iTask r & iTask o & iTask a & Eq o
-moveAround actor actions smap
-	= 	(whileUnchanged smap
-		(\map ->		let room = myRoom actor map in
-										viewInformation "my room" [] room
+moveAround :: ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Actor o a) (Shared (MAP r o a)) -> Task (Actor o a) | iTask r & iTask o & iTask a & Eq o
+moveAround task actor smap
+	= (	whileUnchanged smap
+		(\map -> let room = myRoom actor map in
+			(			(				viewInformation "my room" [] room
 						>>*				[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move actor room.number (fromExit exit) smap))
 										\\ exit <- room.exits
 										]
@@ -108,10 +95,16 @@ moveAround actor actions smap
 										[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject actor room object smap))
 										\\ object <- actor.carrying
 										]
-										++
-										actions room actor
-		))
-		>>= \actor ->	moveAround actor actions smap
+						)
+						-||-
+						(				task map room actor 
+						>>= \actor ->	updateRoom room.number (updateActor actor) smap
+						>>| 			return actor
+						)
+			)
+		)
+	  )
+	>>= \actor ->	moveAround task actor smap
 where
 	pickupObject actor room object smap
 		=				updateRoom room.number (fetchObject object) smap
@@ -142,12 +135,21 @@ move actor fromRoom toRoom smap
 	  	>>| 		updateRoom toRoom (entering actor) smap
 		>>|			return actor
 
-
-
 // defining a concrete map as example
 
-:: MyMap		:== MAP RoomStatus Object ActorStatus
-:: MyActor		:== Actor Object ActorStatus
+Start :: *World -> *World
+Start world 
+    = startEngine 
+    	[ publish "/"      (WebApp []) (\_-> importDemoUsersFlow >>| loginAndManageWorkList "Adventure" myExamples)
+        , publish "/tonic" (WebApp []) (\_-> tonicDashboard [])
+		, publish "/map"   (WebApp []) (\_-> showMap)
+        ] world
+ 
+myExamples :: [Workflow]
+myExamples = 	[	workflow "administrate as present"		"tell where you are currently located"  (get currentUser >>= \me -> askPosition me)
+				,	workflow "give instructions"			"give instructions to a worker" 		giveInstructions			
+			 	]
+
 :: MyRoom		:== Room RoomStatus Object ActorStatus
 :: RoomStatus 	=	Normal
 				|	Alert [Detector]
@@ -155,66 +157,70 @@ move actor fromRoom toRoom smap
 				| 	Smoke 
 :: Object 		= 	FireExtinguisher
 				| 	Blanket
-:: ActorStatus	= Available | NotAvailable | NormalTask | UrgentTask | VeryUrgentTask 
+:: ActorStatus	= 	{ occupied	:: Availability
+					, todo		:: [Instruction]
+					}
+:: Availability	=	Available | NotAvailable | Occupied | HighPriorityTask  
+:: Instruction	=	Goto Int ToDo | WaitFor User
+:: ToDo			=	FightFire | InspectRoom 
+:: MyMap		:== MAP RoomStatus Object ActorStatus
+:: MyActor		:== Actor Object ActorStatus
 
-instance == Object where (==) o1 o2 = o1 === o2
+derive class iTask RoomStatus, Detector, Object, ActorStatus, ToDo, Availability, Instruction
 
-
-derive class iTask RoomStatus, Detector, Object, ActorStatus
+instance == Object 		where (==) o1 o2 = o1 === o2
+instance == Instruction where (==) o1 o2 = o1 === o2
 
 myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
 where
 	floor0  	= [[room1,room2,room3],[corridor],[room4,room5,room6]]
-	room1		= {name = "room 1",   number = 1, status = Normal, inventory = [], exits = [South 4], actors = []}			
-	room2		= {name = "room 2",   number = 2, status = Normal, inventory = [], exits = [South 4], actors = []}			
-	room3		= {name = "room 3",   number = 3, status = Normal, inventory = [FireExtinguisher], exits = [South 4], actors = []}
-	corridor	= {name = "corridor", number = 4, status = Normal, inventory = [], exits = [North 1, North 2, North 3
+	room1		= {name = "room 1",   number = 1, rstatus = Normal, inventory = [], exits = [South 4], actors = []}			
+	room2		= {name = "room 2",   number = 2, rstatus = Normal, inventory = [], exits = [South 4], actors = []}			
+	room3		= {name = "room 3",   number = 3, rstatus = Normal, inventory = [FireExtinguisher], exits = [South 4], actors = []}
+	corridor	= {name = "corridor", number = 4, rstatus = Normal, inventory = [], exits = [North 1, North 2, North 3
 																						   ,South 5, South 6, South 7
 																						   ], actors = []}
-	room4		= {name = "room 4",   number = 5, status = Normal, inventory = [], exits = [North 4], actors = []}			
-	room5		= {name = "room 5",   number = 6, status = Normal, inventory = [], exits = [North 4], actors = []}			
-	room6		= {name = "room 6",   number = 7, status = Normal, inventory = [FireExtinguisher], exits = [North 4], actors = []}
+	room4		= {name = "room 4",   number = 5, rstatus = Normal, inventory = [], exits = [North 4], actors = []}			
+	room5		= {name = "room 5",   number = 6, rstatus = Normal, inventory = [], exits = [North 4], actors = []}			
+	room6		= {name = "room 6",   number = 7, rstatus = Normal, inventory = [FireExtinguisher], exits = [North 4], actors = []}
 			
 // tasks on this specific MAP type
 
-showMap = 		viewSharedInformation "map status:" [] myMap 
+showMap = 		viewSharedInformation "Map Status" [] myMap 
 
 askPosition :: User  -> Task Int
 askPosition user 
 	=							enterInformation "You are lost! What is your location? " [] 
-		>>= \location ->		updateRoom location (entering {userName = user, carrying = [], status = defaultValue}) myMap
+		>>= \location ->		updateRoom location (entering {userName = user, carrying = [], astatus = {occupied = Available,todo = []}}) myMap
 		>>|						return location
 
-:: Instruction  = Goto 		Int 
-				| Fetch 	Object
-				| Drop 		Object
-				| Fight  	Object
-				| Resque	Object
-				| Solve 	String
+isNil [] = True
+isNil _ = False
 
-derive class iTask Instruction
+followInstructions :: MyActor  -> Task ()
+followInstructions actor = moveAround myTask actor myMap >>| return ()
 
-:: MyActions :== MyRoom MyActor -> [TaskCont MyRoom (Task MyActor)]
-myActions :: MyRoom MyActor -> [TaskCont MyRoom (Task MyActor)]
-myActions room actor = [OnAction (Action "Fight Fire" []) (ifCond True (return actor))]
-
-
-followInstructions :: MyActor MyActions -> Task ()
-followInstructions actor actions 	= moveAround actor actions myMap >>| return ()
+myTask map room actor = 				enterMultipleChoice "" [] actor.astatus.todo 
+						>>= \done -> 	let ntodo = removeMembers done actor.astatus.todo in
+											return {actor & astatus.todo = ntodo, astatus.occupied = if (isNil ntodo) Available actor.astatus.occupied}
 
 giveInstructions :: Task ()
 giveInstructions 
 	= forever
-	  (				get myMap
-	   >>= \map -> (	enterChoice "Assign worker" [] (findAllActors map)
-						-&&-
-						enterChoice "Assign Status" [] [NormalTask,UrgentTask,VeryUrgentTask] 
-					)
-	  >>* 	[ OnAction  ActionOk     (hasValue (\((roomNumber,actor),status) 
-	 									-> 			updateRoom roomNumber (updateActor {actor & Actor.status = status}) myMap
-	 										>>|		appendTopLevelTaskFor actor.userName False (followInstructions actor myActions) 
-	 										>>| 	return ()
+	  (		((	enterInformation "Define Instruction" []
+				-&&-
+				enterChoice "Assign Status" [] [Available, NotAvailable, Occupied, HighPriorityTask]
+			)	-&&-
+			whileUnchanged myMap 
+				(\mymap ->  enterChoice "Assign worker" [] [(i,actor) \\ (i,actor) <- findAllActors mymap | actor.astatus.occupied ===  Available])
+			)
+	  >>* 	[ OnAction  ActionOk     (hasValue (\((instructions,urgency),(roomNumber,actor)) 
+	 									-> 			let nactor = {actor & astatus.occupied = urgency , astatus.todo = instructions} in
+	 													(		updateRoom roomNumber (updateActor nactor) myMap
+	 													>>|		appendTopLevelTaskFor nactor.userName False (followInstructions nactor) 
+	 													>>| 	return ()
+	 													)
 	 											)
 	 								 )
             , OnAction  ActionCancel (always (return ()))
@@ -224,18 +230,6 @@ giveInstructions
 						
 
 
-/*
-
-showInstruction :: (Room r o a) [Instruction] -> Task ()
-showInstruction room todo
-	=	(viewInformation "You are here:" [] room
-		-&&-
-		viewInformation "Your current instructions are:" [ViewWith (\i -> toSingleLineText i <+++ ";")] todo)
-		>>| 
-		return ()
-*/
-
-// define a set of instructions to be done and someone to work on it 
 
 
 
