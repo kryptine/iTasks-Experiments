@@ -90,7 +90,7 @@ findAllActors map =	[ (room.number,actor)
 
 // moving around in the map
 
-:: UserActions r o a :== [TaskCont (Room r o a) (Task (Actor o a))]
+:: UserActions r o a :== (Room r o a) (Actor o a) -> [TaskCont (Room r o a) (Task (Actor o a))]
 
 moveAround :: (Actor o a) (UserActions r o a) (Shared (MAP r o a)) -> Task (Actor o a) | iTask r & iTask o & iTask a & Eq o
 moveAround actor actions smap
@@ -108,6 +108,8 @@ moveAround actor actions smap
 										[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject actor room object smap))
 										\\ object <- actor.carrying
 										]
+										++
+										actions room actor
 		))
 		>>= \actor ->	moveAround actor actions smap
 where
@@ -153,7 +155,6 @@ move actor fromRoom toRoom smap
 				| 	Smoke 
 :: Object 		= 	FireExtinguisher
 				| 	Blanket
-				| 	Waterhose
 :: ActorStatus	= Available | NotAvailable | NormalTask | UrgentTask | VeryUrgentTask 
 
 instance == Object where (==) o1 o2 = o1 === o2
@@ -194,9 +195,34 @@ askPosition user
 
 derive class iTask Instruction
 
-followInstructions :: MyActor [Instruction] -> Task ()
-//followInstructions _ [] 		= return ()
-followInstructions actor todo 	= moveAround actor [] myMap >>| return ()
+:: MyActions :== MyRoom MyActor -> [TaskCont MyRoom (Task MyActor)]
+myActions :: MyRoom MyActor -> [TaskCont MyRoom (Task MyActor)]
+myActions room actor = [OnAction (Action "Fight Fire" []) (ifCond True (return actor))]
+
+
+followInstructions :: MyActor MyActions -> Task ()
+followInstructions actor actions 	= moveAround actor actions myMap >>| return ()
+
+giveInstructions :: Task ()
+giveInstructions 
+	= forever
+	  (				get myMap
+	   >>= \map -> (	enterChoice "Assign worker" [] (findAllActors map)
+						-&&-
+						enterChoice "Assign Status" [] [NormalTask,UrgentTask,VeryUrgentTask] 
+					)
+	  >>* 	[ OnAction  ActionOk     (hasValue (\((roomNumber,actor),status) 
+	 									-> 			updateRoom roomNumber (updateActor {actor & Actor.status = status}) myMap
+	 										>>|		appendTopLevelTaskFor actor.userName False (followInstructions actor myActions) 
+	 										>>| 	return ()
+	 											)
+	 								 )
+            , OnAction  ActionCancel (always (return ()))
+            ]
+	 )
+
+						
+
 
 /*
 
@@ -211,31 +237,5 @@ showInstruction room todo
 
 // define a set of instructions to be done and someone to work on it 
 
-giveInstructions :: Task ()
-giveInstructions 
-	= forever
-	  (				get myMap
-	   >>= \map -> (	(enterInformation "Define Instructions" [] 
-						-&&-
-						enterChoice "Assign worker" [] (findAllActors map))
-						-&&-
-						enterChoice "Assign Status" [] [NormalTask,UrgentTask,VeryUrgentTask] 
-					)
-	  >>* 	[ OnAction  ActionOk     (hasValue (\((todo,(roomNumber,actor)),status) 
-	 									-> 			updateRoom roomNumber (updateActor {actor & Actor.status = status}) myMap
-	 										>>|		appendTopLevelTaskFor actor.userName False (followInstructions actor todo) 
-	 										>>| 	return ()
-	 											)
-	 								 )
-            , OnAction  ActionCancel (always (return ()))
-            ]
-	 )
-
-myActions :: [TaskCont MyRoom MyActor]
-myActions = undef
-						
-
-f :: (Room r o a) (Actor o a) -> (UserActions r o a) |  iTask r & iTask o & iTask a & Eq o
-f room actor = [OnAction (Action "Id" []) (withValue (\_ ->  Just (return actor)))]
 
 
