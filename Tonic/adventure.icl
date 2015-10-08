@@ -6,6 +6,8 @@ import iTasks
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
 
+import StdMisc
+
 Start :: *World -> *World
 Start world 
     = startEngine 
@@ -19,13 +21,13 @@ myExamples = 	[	workflow "give instructions"			"give instructions to a worker" 	
 				,	workflow "administrate as present"		"tell where you are currently located"  (get currentUser >>= \me -> askPosition me)
 			 	]
 
-:: Room roomstatus object actorstatus
+:: Room roomStatus object actorStatus
 				=	{ name		 :: String
 					, number 	 :: Int
-					, status	 :: roomstatus
-					, inventory	 :: [object]
 					, exits		 :: [Exit]
-					, present	 :: [Actor object actorstatus]
+					, status	 :: roomStatus
+					, inventory	 :: [object]
+					, actors	 :: [Actor object actorStatus]
 					}
 :: Exit			=	North Int
 				|	East Int
@@ -33,13 +35,12 @@ myExamples = 	[	workflow "give instructions"			"give instructions to a worker" 	
 				|	West Int
 				|	Up Int
 				|	Down Int
-:: Actor o a
-				=	{ userName	:: User
+:: Actor o a	=	{ userName	:: User
 					, carrying	:: [o]
 					, status	:: a
 					}
-:: Floor s o a	:==	[[Room s o a]]
-:: MAP s o a	:== [Floor s o a]
+:: Floor r o a	:==	[[Room r o a]]
+:: MAP r o a	:== [Floor r o a]
 
 derive class iTask Room, Exit, Actor
 
@@ -57,27 +58,44 @@ fromExit (Down i) = i
 
 // utility functions on Room
 
-leaving :: (Actor o a) (Room s o a) -> (Room s o a) | Eq o
-leaving actor room = {room & present = removeMember actor room.present}
+leaving :: (Actor o a) (Room r o a) -> (Room r o a) | Eq o
+leaving actor room = {room & actors = removeMember actor room.actors}
 
-entering :: (Actor o a) (Room s o a) -> (Room s o a)
-entering actor room = {room & present = [actor:room.present]}
+entering :: (Actor o a) (Room r o a) -> (Room r o a)
+entering actor room = {room & actors = [actor:room.actors]}
 
-fetchObject :: o (Room s o a) -> (Room s o a) | Eq o
+fetchObject :: o (Room r o a) -> (Room r o a) | Eq o
 fetchObject object room = {room & inventory = removeMember object room.inventory}
 
-dropObject ::  o (Room s o a) -> (Room s o a)
+dropObject ::  o (Room r o a) -> (Room r o a)
 dropObject object room = {room & inventory = [object:room.inventory]}
 
-updateActor :: (Actor o a) (Room s o a) -> (Room s o a) | Eq o
-updateActor actor room = {room & present = [actor:removeMember actor room.present]}
+updateActor :: (Actor o a) (Room r o a) -> (Room r o a) | Eq o
+updateActor actor room = {room & actors = [actor:removeMember actor room.actors]}
 
-// tasks on Room
+myRoom :: (Actor o a) (MAP r o a) -> (Room r o a)
+myRoom actor map 
+# rooms	=	[ room 
+			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors 
+			| actor.userName == userName
+			] 
+= case rooms of 
+	[]  -> abort "cannot find room of actor"
+	_	-> hd rooms
 
-doInstructions :: (Actor o a) (Shared (MAP s o a)) -> Task (Actor o a) | iTask s & iTask o & iTask a & Eq o
-doInstructions actor smap
+findAllActors :: (MAP r o a) ->  [(Int,(Actor o a))]
+findAllActors map =	[ (room.number,actor)
+					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors 
+					]
+
+// moving around in the map
+
+:: UserActions r o a :== [TaskCont (Room r o a) (Task (Actor o a))]
+
+moveAround :: (Actor o a) (UserActions r o a) (Shared (MAP r o a)) -> Task (Actor o a) | iTask r & iTask o & iTask a & Eq o
+moveAround actor actions smap
 	= 	(whileUnchanged smap
-		(\map ->		let room = hd (myRoom actor map) in
+		(\map ->		let room = myRoom actor map in
 										viewInformation "my room" [] room
 						>>*				[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move actor room.number (fromExit exit) smap))
 										\\ exit <- room.exits
@@ -91,7 +109,7 @@ doInstructions actor smap
 										\\ object <- actor.carrying
 										]
 		))
-		>>= \actor ->	doInstructions actor smap
+		>>= \actor ->	moveAround actor actions smap
 where
 	pickupObject actor room object smap
 		=				updateRoom room.number (fetchObject object) smap
@@ -105,7 +123,7 @@ where
 		>>= \actor ->	updateRoom room.number (updateActor actor) smap
 		>>| 			return actor
 
-updateRoom :: Int ((Room s o a)-> (Room s o a)) (Shared (MAP s o a))-> Task () | iTask s & iTask o & iTask a
+updateRoom :: Int ((Room r o a)-> (Room r o a)) (Shared (MAP r o a))-> Task () | iTask r & iTask o & iTask a
 updateRoom roomNumber updRoom smap 
 	= 	upd (updateRoom` roomNumber updRoom) smap 
 	>>| return ()
@@ -115,26 +133,7 @@ where
 	where
 		updateThisRoom room = if (i == room.number) (upd room)  room
 
-
-findRoom :: (Actor o a) (Shared (MAP s o a)) -> Task (Room s o a)| iTask s & iTask o & iTask a
-findRoom actor smap
-	= 				get smap 
-		>>= \map -> case (myRoom actor map) of
-						rooms   -> 		return (hd rooms)
-
-/*
-
-findRoom :: (Actor o a) (Shared (MAP s o a)) -> Task (Room s o a)| iTask s & iTask o & iTask a
-findRoom actor smap
-	= 				get smap 
-		>>= \map -> case (myRoom actor map) of
-						[] 		-> 		askPosition actor.userName  					// not administrated yet, add it
-									>>| findRoom actor
-						rooms   -> 		return (hd rooms)
-
-*/
-
-move :: (Actor o a) Int Int (Shared (MAP s o a))-> Task (Actor o a)| iTask s & iTask o & iTask a & Eq o
+move :: (Actor o a) Int Int (Shared (MAP r o a))-> Task (Actor o a)| iTask r & iTask o & iTask a & Eq o
 move actor fromRoom toRoom smap
 	= 				
 	  			 	updateRoom fromRoom (leaving actor) smap
@@ -142,21 +141,12 @@ move actor fromRoom toRoom smap
 		>>|			return actor
 
 
-myRoom :: (Actor o a) (MAP s o a) -> [(Room s o a)]
-myRoom actor map = 	[ room 
-					\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.present 
-					| actor.userName == userName
-					] 
-
-findAllActors :: (MAP s o a) ->  [(Int,(Actor o a))]
-findAllActors map =	[ (room.number,actor)
-					\\ floor <- map, layer <- floor, room <- layer, actor <- room.present 
-					]
 
 // defining a concrete map as example
 
 :: MyMap		:== MAP RoomStatus Object ActorStatus
 :: MyActor		:== Actor Object ActorStatus
+:: MyRoom		:== Room RoomStatus Object ActorStatus
 :: RoomStatus 	=	Normal
 				|	Alert [Detector]
 :: Detector		=	Fire 
@@ -175,15 +165,15 @@ myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
 where
 	floor0  	= [[room1,room2,room3],[corridor],[room4,room5,room6]]
-	room1		= {name = "room 1",   number = 1, status = Normal, inventory = [], exits = [South 4], present = []}			
-	room2		= {name = "room 2",   number = 2, status = Normal, inventory = [], exits = [South 4], present = []}			
-	room3		= {name = "room 3",   number = 3, status = Normal, inventory = [FireExtinguisher], exits = [South 4], present = []}
+	room1		= {name = "room 1",   number = 1, status = Normal, inventory = [], exits = [South 4], actors = []}			
+	room2		= {name = "room 2",   number = 2, status = Normal, inventory = [], exits = [South 4], actors = []}			
+	room3		= {name = "room 3",   number = 3, status = Normal, inventory = [FireExtinguisher], exits = [South 4], actors = []}
 	corridor	= {name = "corridor", number = 4, status = Normal, inventory = [], exits = [North 1, North 2, North 3
 																						   ,South 5, South 6, South 7
-																						   ], present = []}
-	room4		= {name = "room 4",   number = 5, status = Normal, inventory = [], exits = [North 4], present = []}			
-	room5		= {name = "room 5",   number = 6, status = Normal, inventory = [], exits = [North 4], present = []}			
-	room6		= {name = "room 6",   number = 7, status = Normal, inventory = [FireExtinguisher], exits = [North 4], present = []}
+																						   ], actors = []}
+	room4		= {name = "room 4",   number = 5, status = Normal, inventory = [], exits = [North 4], actors = []}			
+	room5		= {name = "room 5",   number = 6, status = Normal, inventory = [], exits = [North 4], actors = []}			
+	room6		= {name = "room 6",   number = 7, status = Normal, inventory = [FireExtinguisher], exits = [North 4], actors = []}
 			
 // tasks on this specific MAP type
 
@@ -206,11 +196,11 @@ derive class iTask Instruction
 
 followInstructions :: MyActor [Instruction] -> Task ()
 //followInstructions _ [] 		= return ()
-followInstructions actor todo 	= doInstructions actor myMap >>| return ()
+followInstructions actor todo 	= moveAround actor [] myMap >>| return ()
 
 /*
 
-showInstruction :: (Room s o a) [Instruction] -> Task ()
+showInstruction :: (Room r o a) [Instruction] -> Task ()
 showInstruction room todo
 	=	(viewInformation "You are here:" [] room
 		-&&-
@@ -241,9 +231,11 @@ giveInstructions
             ]
 	 )
 
-
+myActions :: [TaskCont MyRoom MyActor]
+myActions = undef
 						
 
-
+f :: (Room r o a) (Actor o a) -> (UserActions r o a) |  iTask r & iTask o & iTask a & Eq o
+f room actor = [OnAction (Action "Id" []) (withValue (\_ ->  Just (return actor)))]
 
 
