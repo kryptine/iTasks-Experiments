@@ -81,7 +81,8 @@ findAllActors map =	[ (room.number,actor)
 
 moveAround :: ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Actor o a) (Shared (MAP r o a)) -> Task (Actor o a) | iTask r & iTask o & iTask a & Eq o
 moveAround task actor smap
-	= (	whileUnchanged smap
+	= 		
+	(	whileUnchanged smap
 		(\map -> let room = myRoom actor map in
 			(			(				viewInformation "my room" [] room
 						>>*				[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move actor room.number (fromExit exit) smap))
@@ -146,8 +147,8 @@ Start world
         ] world
  
 myExamples :: [Workflow]
-myExamples = 	[	workflow "administrate as present"		"tell where you are currently located"  (get currentUser >>= \me -> askPosition me)
-				,	workflow "give instructions"			"give instructions to a worker" 		giveInstructions			
+myExamples = 	[	workflow "walk around"			"you will start in room 1 on the map"  (get currentUser >>= \me -> administrate me)
+				,	workflow "give instructions"	"give instructions to a worker" 		giveInstructions			
 			 	]
 
 :: MyRoom		:== Room RoomStatus Object ActorStatus
@@ -189,11 +190,14 @@ where
 
 showMap = 		viewSharedInformation "Map Status" [] myMap 
 
-askPosition :: User  -> Task Int
-askPosition user 
-	=							enterInformation "You are lost! What is your location? " [] 
-		>>= \location ->		updateRoom location (entering {userName = user, carrying = [], astatus = {occupied = Available,todo = []}}) myMap
-		>>|						return location
+administrate :: User  -> Task ()
+administrate user 
+	=			updateRoom 1 (entering actor) myMap
+		>>|		viewInformation "you are administrated, now you can walk around" [] ()
+		>>|		followInstructions actor
+where
+	actor = {userName = user, carrying = [], astatus = {occupied = Available,todo = []}}
+
 
 isNil [] = True
 isNil _ = False
