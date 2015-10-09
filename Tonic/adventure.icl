@@ -144,7 +144,7 @@ findMe me map
 
 findRoom :: (Actor o a) (MAP r o a) -> (Room r o a)
 findRoom actor map 
-# rooms	=	[ room 
+# rooms	=	[ room
 			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors 
 			| actor.userName == userName
 			] 
@@ -158,7 +158,9 @@ findAllActors map =	[ (room.number,actor)
 					]
 
 findAllRoomNumbers :: (MAP r o a) ->  [Int]
-findAllRoomNumbers map = [i \\ (i,actors) <- findAllActors map]
+findAllRoomNumbers map = 	[room.number
+							\\ floor <- map, layer <- floor, room <- layer
+							]
 
 exitsRoom :: Int (MAP r o a) -> Bool
 exitsRoom i map = isMember i (findAllRoomNumbers map)
@@ -175,7 +177,7 @@ Start world
         ] world
  
 myExamples :: [Workflow]
-myExamples = 	[	workflow "walk around"			"you will start in room 1 on the map"  (get currentUser >>= \me -> administrate me)
+myExamples = 	[	workflow "walk around"			"choose room to start in and walk around"  (get currentUser >>= \me -> administrate me)
 				,	workflow "give instructions"	"give instructions to a worker" 		giveInstructions			
 			 	]
 
