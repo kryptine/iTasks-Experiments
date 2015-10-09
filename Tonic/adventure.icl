@@ -75,49 +75,63 @@ findAllActors map =	[ (room.number,actor)
 					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors 
 					]
 
+findMe :: User (MAP r o a) ->  Maybe (Int,(Actor o a))
+findMe me map 
+#	found = [(location,actor) \\ (location,actor) <- findAllActors map | actor.userName == me]
+= if (isNil found) Nothing (Just (hd found)) 
+
 // moving around in the map
 
 :: UserActions r o a :== (Room r o a) (Actor o a) -> [TaskCont (Room r o a) (Task (Actor o a))]
 
-moveAround :: ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Actor o a) (Shared (MAP r o a)) -> Task (Actor o a) | iTask r & iTask o & iTask a & Eq o
+moveAround :: ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Actor o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 moveAround task actor smap
-	= 		
-	(	whileUnchanged smap
-		(\map -> let room = myRoom actor map in
-			(			(				viewInformation "my room" [] room
-						>>*				[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move actor room.number (fromExit exit) smap))
+	= forever		
+		(whileUnchanged smap
+			(\map -> let room 	= myRoom actor map 
+						 nactor = hd [nactor \\ nactor <- room.actors | nactor.userName == actor.userName]
+					 in
+					(	 (		(		viewInformation "my room" [] room
+								 >>*	[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
 										\\ exit <- room.exits
 										]
 										++ 
-										[ OnAction (Action ("Fetch " <+++ object) [])  	(always (pickupObject actor room object smap))
+										[ OnAction (Action ("Fetch " <+++ object) [])  	(always (pickupObject nactor room object smap))
 										\\ object <- room.inventory
 										]
 										++
-										[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject actor room object smap))
-										\\ object <- actor.carrying
+										[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject nactor room object smap))
+										\\ object <- nactor.carrying
 										]
+								)
+								-||-
+								(				task map room nactor
+								>>= \actor ->	updateRoom room.number (updateActor actor) smap
+								>>|				return ()
+								)
+ 
 						)
-						-||-
-						(				task map room actor 
-						>>= \actor ->	updateRoom room.number (updateActor actor) smap
-						>>| 			return actor
-						)
+			    )
 			)
-		)
-	  )
-	>>= \actor ->	moveAround task actor smap
+		  )
 where
 	pickupObject actor room object smap
 		=				updateRoom room.number (fetchObject object) smap
 		>>|				return {actor & carrying = [object:actor.carrying]}
 		>>= \actor ->	updateRoom room.number (updateActor actor) smap
-		>>| 			return actor
+		>>|				return ()
 	
 	dropDownObject actor room object smap
 		=				updateRoom room.number (dropObject object) smap
 		>>|				return {actor & carrying = removeMember object actor.carrying}
 		>>= \actor ->	updateRoom room.number (updateActor actor) smap
-		>>| 			return actor
+		>>|				return ()
+
+	move actor fromRoom toRoom smap
+		= 				updateRoom fromRoom (leaving actor) smap
+		>>| 			updateRoom toRoom (entering actor) smap
+		>>|				return ()
+
 
 updateRoom :: Int ((Room r o a)-> (Room r o a)) (Shared (MAP r o a))-> Task () | iTask r & iTask o & iTask a
 updateRoom roomNumber updRoom smap 
@@ -129,12 +143,6 @@ where
 	where
 		updateThisRoom room = if (i == room.number) (upd room)  room
 
-move :: (Actor o a) Int Int (Shared (MAP r o a))-> Task (Actor o a)| iTask r & iTask o & iTask a & Eq o
-move actor fromRoom toRoom smap
-	= 				
-	  			 	updateRoom fromRoom (leaving actor) smap
-	  	>>| 		updateRoom toRoom (entering actor) smap
-		>>|			return actor
 
 // defining a concrete map as example
 
@@ -192,9 +200,12 @@ showMap = 		viewSharedInformation "Map Status" [] myMap
 
 administrate :: User  -> Task ()
 administrate user 
-	=			updateRoom 1 (entering actor) myMap
-		>>|		viewInformation "you are administrated, now you can walk around" [] ()
-		>>|		followInstructions actor
+	=			get myMap
+	>>= \map -> case (findMe user map) of
+					Nothing	 	-> 			updateRoom 1 (entering actor) myMap
+									>>|		viewInformation "You are in room 1, now you can walk around" [] ()
+									>>|		followInstructions actor
+					Just (loc,me) ->		viewInformation ("You are already in room" <+++ loc) [] () >>| return ()
 where
 	actor = {userName = user, carrying = [], astatus = {occupied = Available,todo = []}}
 
@@ -222,7 +233,7 @@ giveInstructions
 	  >>* 	[ OnAction  ActionOk     (hasValue (\((instructions,urgency),(roomNumber,actor)) 
 	 									-> 			let nactor = {actor & astatus.occupied = urgency , astatus.todo = instructions} in
 	 													(		updateRoom roomNumber (updateActor nactor) myMap
-	 													>>|		appendTopLevelTaskFor nactor.userName False (followInstructions nactor) 
+//	 													>>|		appendTopLevelTaskFor nactor.userName False (followInstructions nactor) 
 	 													>>| 	return ()
 	 													)
 	 											)
