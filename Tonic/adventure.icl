@@ -5,7 +5,10 @@ import iTasks
  
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
-
+import qualified Data.IntMap.Strict as DIS
+from Data.IntMap.Strict import :: IntMap
+import qualified Data.Heap as DH
+from Data.Heap import :: Heap
 import StdMisc
 
 :: Room roomStatus object actorStatus
@@ -32,6 +35,62 @@ import StdMisc
 derive class iTask Room, Exit, Actor
 
 // small utility functions 
+
+:: PreviousIdx :== Int
+:: Distance :== Int
+:: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
+:: PQueue :== Heap (Int, Int)
+
+shortestPath :: (r -> Int) (Room r o a) (Room r o a) (MAP r o a) -> [Exit]
+shortestPath cost startRoom endRoom allRooms
+  # graph = mkGraph allRooms
+  # queue = 'DH'.singleton (0, startRoom.number)
+  # graph = findSP cost graph queue
+  = reverse (reconstructSP graph)
+  where
+  reconstructSP :: (Graph r o a) -> [Exit]
+  reconstructSP graph = case 'DIS'.get endRoom.number graph of
+                          Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
+                                                    Just (_, _, r) -> reconstructSP` graph prevIdx [getExit r endRoom.number]
+                          _ -> []
+  getExit {exits} to = hd [e \\ e <- exits | fromExit e == to]
+  reconstructSP` graph currIdx path
+    | currIdx == startRoom.number = path
+    | otherwise = case 'DIS'.get currIdx graph of
+                    Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
+                                              Just (_, _, r) -> reconstructSP` graph prevIdx [getExit r prevIdx : path]
+                    _ -> []
+
+  findSP :: (r -> Int) (Graph r o a) PQueue -> Graph r o a
+  findSP cost graph queue
+    | 'DH'.null queue = graph
+    | otherwise
+      = case 'DH'.uncons queue of
+          Just ((minDist, minIdx), _)
+            = case 'DIS'.get minIdx graph of
+                Just (minDist, prevIdx, room=:{exits})
+                  # (graph, queue) = foldr (\exit (graph, queue) -> case 'DIS'.get (fromExit exit) graph of
+                                                                      Just (nDist, nPrevIdx, nRoom)
+                                                                        # alt = minDist + cost nRoom.rstatus
+                                                                        | alt < nDist
+                                                                          # graph = 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
+                                                                          # queue = 'DH'.insert (alt, minIdx) queue
+                                                                          = (graph, queue)
+                                                                        | otherwise = (graph, queue)) (graph, queue) exits
+                  = findSP cost graph queue
+                _ = graph
+          _ = graph
+
+  mkGraph :: (MAP r o a) -> IntMap (Distance, PreviousIdx, Room r o a)
+  mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
+
+  floorToGraph :: (Floor r o a) (IntMap (Distance, PreviousIdx, Room r o a)) -> IntMap (Distance, PreviousIdx, Room r o a)
+  floorToGraph floor graph = foldr (\rooms graph -> foldr roomToGraph graph rooms) graph floor
+
+  roomToGraph :: (Room r o a) (IntMap (Distance, PreviousIdx, Room r o a)) -> IntMap (Distance, PreviousIdx, Room r o a)
+  roomToGraph room=:{number} graph
+    # dist = if (number == startRoom.number) 0 65536
+    = 'DIS'.put number (dist, -1, room) graph
 
 instance == (Actor o a)  where (==) a1 a2 = a1.userName == a2.userName
 
