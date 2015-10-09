@@ -2602,6 +2602,20 @@ OtherModules
 			ReuseUniqueNodes:	True
 			Fusion:	False
 	Module
+		Name:	iTasks._Framework.Tonic
+		Dir:	{Application}\iTasks-SDK\Server
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	NoTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
 		Name:	iTasks._Framework.Tonic.AbsSyn
 		Dir:	{Application}\iTasks-SDK\Server
 		Compiler
