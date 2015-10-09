@@ -53,8 +53,11 @@ myExamples = 	[	workflow "enter a value" 				"Enter a value and inspect its resu
 				,	workflow "chat 2"						"two users can chat with each other, and point to interesting points on a map" chat2
 
 
-				,	workflow "Manage users"					"Create users and logins..." 		manageUsers
-			 	]
+				,	workflow "Manage users"					"Create users and logins..." 	manageUsers
+
+
+				,	workflow "test"							"test tonic"					test
+				]
 
 
 // Exercise 1: compile and run the application
@@ -182,7 +185,13 @@ updateAndView (me,workOfMe) (you,workOfYou)
 // Exercise 7: play wit chat1 and chat2. Make a useful variant chat3 with your own favority types.
 
 	    
-	    
+test =							enterInformation "number of parallel tasks"	[]
+//		>>= \n -> 				allTasks [doOne i \\ i <- [0..n]]
+//		>>= \n -> 				allTasks [doOne n, doOne (n+1)]
+		>>= \n -> 				(doOne n >>| doOne n) -&&- doOne (n+1)
+		>>= 					viewInformation "result of alltasks" []
+where
+	doOne i = updateInformation (toString i) [] i >>= viewInformation ("result" <+++ i) [] 
 
 
 
