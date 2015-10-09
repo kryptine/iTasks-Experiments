@@ -26,10 +26,10 @@ import StdMisc
 					, carrying	:: [o]
 					, astatus	:: a
 					}
-:: Floor r o a	= Floor [[Room r o a]]
+:: Floor r o a	:==	[[Room r o a]]
 :: MAP r o a	:== [Floor r o a]
 
-derive class iTask Floor, Room, Exit, Actor
+derive class iTask Room, Exit, Actor
 
 // small utility functions 
 
@@ -63,7 +63,7 @@ updateActor actor room = {room & actors = [actor:removeMember actor room.actors]
 myRoom :: (Actor o a) (MAP r o a) -> (Room r o a)
 myRoom actor map 
 # rooms	=	[ room 
-			\\ Floor floor <- map, layer <- floor, room <- layer, {userName} <- room.actors 
+			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors 
 			| actor.userName == userName
 			] 
 = case rooms of 
@@ -72,7 +72,7 @@ myRoom actor map
 
 findAllActors :: (MAP r o a) ->  [(Int,(Actor o a))]
 findAllActors map =	[ (room.number,actor)
-					\\ Floor floor <- map, layer <- floor, room <- layer, actor <- room.actors 
+					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors 
 					]
 
 // moving around in the map
@@ -124,7 +124,7 @@ updateRoom roomNumber updRoom smap
 	>>| return ()
 where 
 	updateRoom` i upd [] 	  			= []
-	updateRoom` i upd [Floor floor:floors]   	= [Floor [map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
+	updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
 	where
 		updateThisRoom room = if (i == room.number) (upd room)  room
 
@@ -174,7 +174,7 @@ instance == Instruction where (==) o1 o2 = o1 === o2
 myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
 where
-	floor0  	= Floor [[room1,room2,room3],[corridor],[room4,room5,room6]]
+	floor0  	= [[room1,room2,room3],[corridor],[room4,room5,room6]]
 	room1		= {name = "room 1",   number = 1, rstatus = Normal, inventory = [], exits = [South 4], actors = []}			
 	room2		= {name = "room 2",   number = 2, rstatus = Normal, inventory = [], exits = [South 4], actors = []}			
 	room3		= {name = "room 3",   number = 3, rstatus = Normal, inventory = [FireExtinguisher], exits = [South 4], actors = []}
