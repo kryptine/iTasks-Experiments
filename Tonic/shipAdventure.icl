@@ -78,12 +78,12 @@ handleInstructions map room actor
 			>>| 		return  actor
 		)
 		(				enterMultipleChoice "ToDo list" [] actor.actorStatus.todo 
-			>>= \done ->return (adjustToDoList actor done)
+			>>= \done -> adjustToDoList actor actor.actorStatus.todo done
 		)
 where
-	adjustToDoList actor done
-	# ntodo = removeMembers done actor.actorStatus.todo
-	= {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
+	adjustToDoList actor todo done
+	# ntodo = removeMembers done todo
+	= return {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
 
 giveInstructions :: Task ()
 giveInstructions 
@@ -123,8 +123,10 @@ setRoomDetectors
 	=				get myMap
 	>>= \map ->		enterChoice "The detectors of which room do you want to set?" [] (findAllRoomNumbers map)
 	>>= \nr	 -> 	getRoomStatus nr myMap
-	>>= \status ->	updateInformation "Set detectors in the room" [] (fromJust status)
-	>>= \nstatus -> updRoomStatus nr (\_ -> nstatus) myMap
+	>>= \status ->	updateInformation ("Set detectors in the room number: " <+++ nr) [] (fromJust status)
+	>>*				[ OnAction ActionOk (hasValue (\status -> updRoomStatus nr (\_ -> status) myMap))
+					, OnAction ActionCancel (always (return ()))
+					]
 	>>|				setRoomDetectors
 
 

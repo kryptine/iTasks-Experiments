@@ -61,9 +61,12 @@ addActorToMap actor location task smap
 					Just (loc,me) ->		viewInformation ("You are already in room" <+++ loc) [] () >>| return ()
 
 moveAround :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveAround  actor task smap
-	= forever		
-		(whileUnchanged smap
+moveAround actor task smap
+	= forever (moveOnStep actor task smap)
+
+moveOnStep :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+moveOnStep  actor task smap
+	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
@@ -89,7 +92,6 @@ moveAround  actor task smap
 						)
 			    )
 			)
-		  )
 where
 	pickupObject actor room object smap
 		=				updateRoom room.number (fetchObject object) smap
@@ -136,7 +138,7 @@ where
 getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
 getRoomStatus roomNumber smap 
 	=			get smap
-	>>= \map ->	case [room.roomStatus \\ room <- findAllRooms map] of
+	>>= \map ->	case [room.roomStatus \\ room <- findAllRooms map | room.number == roomNumber] of
 					[] -> return Nothing
 					status -> return (Just (hd status))
 					 
