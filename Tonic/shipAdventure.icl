@@ -6,43 +6,46 @@ import iTasks
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
 
-
-
+:: MyMap		:== MAP RoomStatus Object ActorStatus
+:: MyActor		:== Actor Object ActorStatus
 :: MyRoom		:== Room RoomStatus Object ActorStatus
-:: RoomStatus 	=	Normal
-				|	Alert [Detector]
-:: Detector		=	Fire 
-				| 	Smoke 
+
+:: RoomStatus 	:==	[Detector] 
+:: Detector		=	FireDetector Bool 
+				| 	SmokeDetector Bool
 :: Object 		= 	FireExtinguisher
 				| 	Blanket
 :: ActorStatus	= 	{ occupied	:: Availability
-					, todo		:: [Instruction]
+					, todo		:: [(Instruction,Priority)]
 					}
-:: Availability	=	Available | NotAvailable | Occupied | HighPriorityTask  
-:: Instruction	=	Goto Int ToDo | WaitFor User
-:: ToDo			=	FightFire | InspectRoom 
-:: MyMap		:== MAP RoomStatus Object ActorStatus
-:: MyActor		:== Actor Object ActorStatus
+:: Availability	=	Available | NotAvailable | Busy  
 
-derive class iTask RoomStatus, Detector, Object, ActorStatus, ToDo, Availability, Instruction
+:: Instruction	=	FightFireInRoom Int | InspectSmokeInRoom Int | GotoRoom Int 
+:: Priority		=	NormalPriority | HighPriority | Urgent | Vital
+
+
+derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority
 
 instance == Object 		where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
+instance == Priority    where (==) o1 o2 = o1 === o2
 
 myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
 where
 	floor0  	= [[room1,room2,room3],[corridor],[room4,room5,room6]]
-	room1		= {name = "room 1",   number = 1, roomStatus = Normal, inventory = [], exits = [South 4], actors = []}			
-	room2		= {name = "room 2",   number = 2, roomStatus = Normal, inventory = [], exits = [South 4], actors = []}			
-	room3		= {name = "room 3",   number = 3, roomStatus = Normal, inventory = [FireExtinguisher], exits = [South 4], actors = []}
-	corridor	= {name = "corridor", number = 4, roomStatus = Normal, inventory = [], exits = [North 1, North 2, North 3
+	room1		= {name = "room 1",   number = 1, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
+	room2		= {name = "room 2",   number = 2, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
+	room3		= {name = "room 3",   number = 3, roomStatus = detectors, inventory = [FireExtinguisher], exits = [South 4], actors = []}
+	corridor	= {name = "corridor", number = 4, roomStatus = detectors, inventory = [], exits = [North 1, North 2, North 3
 																						   ,South 5, South 6, South 7
 																						   ], actors = []}
-	room4		= {name = "room 4",   number = 5, roomStatus = Normal, inventory = [], exits = [North 4], actors = []}			
-	room5		= {name = "room 5",   number = 6, roomStatus = Normal, inventory = [], exits = [North 4], actors = []}			
-	room6		= {name = "room 6",   number = 7, roomStatus = Normal, inventory = [FireExtinguisher], exits = [North 4], actors = []}
-			
+	room4		= {name = "room 4",   number = 5, roomStatus = detectors, inventory = [], exits = [North 4], actors = []}			
+	room5		= {name = "room 5",   number = 6, roomStatus = detectors, inventory = [Blanket], exits = [North 4], actors = []}			
+	room6		= {name = "room 6",   number = 7, roomStatus = detectors, inventory = [FireExtinguisher], exits = [North 4], actors = []}
+	
+	detectors = [FireDetector False,SmokeDetector False]			
+
 // tasks on this specific MAP type
 
 Start :: *World -> *World
@@ -53,13 +56,13 @@ Start world
 		, publish "/map"   (WebApp []) (\_-> showMap)
         ] world
  
-myTasks :: [Workflow]
-myTasks = 	[	workflow "follow instructions"	"walk around and follow given instructions"  (get currentUser >>= \me -> actorWithInstructions me)
-			,	workflow "give instructions"	"give instructions to a worker" 			giveInstructions			
-		 	]
-
 showMap = 		viewSharedInformation "Map Status" [] myMap 
 
+myTasks :: [Workflow]
+myTasks = 	[	workflow "follow instructions"	"enter map, walk around and follow given instructions"  (get currentUser >>= \me -> actorWithInstructions me)
+			,	workflow "give instructions"	"give instructions to someone in the map" 				giveInstructions			
+			, 	workflow "set room detectors"	"set / reset detectors in a room" 						setRoomDetectors
+		 	]
 
 actorWithInstructions :: User  -> Task ()
 actorWithInstructions user 
@@ -87,20 +90,17 @@ giveInstructions
 	= forever
 	  (		(	selectSomeOne
 	  			-&&-
-	  			enterInformation "Define Instruction" []
-				-&&-
-				enterChoice "Assign Status" [] [Available, NotAvailable, Occupied, HighPriorityTask]
+	  			enterInformation "Define Instructions" []
 			 )	
-	  >>* 	[ OnAction  ActionOk (hasValue (\((roomNumber,actor),(instructions,urgency)) 
-	 									-> 	updActorStatus actor.userName (\st -> {st & occupied = urgency
-	 																				  , todo = 	instructions ++ st.todo
+	  >>* 	[ OnAction  ActionOk (hasValue (\((roomNumber,actor),instructions) 
+	 									-> 	updActorStatus actor.userName (\st -> {st & occupied = Busy
+	 																				  , todo 	 = instructions ++ st.todo
 	 																			   }) myMap
 	 													)
 	 											)
             , OnAction  ActionCancel (always (return ()))
             ]
 	 )
-
 
 selectSomeOne :: Task (Int,MyActor)
 selectSomeOne 
@@ -116,5 +116,17 @@ selectSomeOneWith :: ((MyActor) -> Bool) -> Task (Int,MyActor)
 selectSomeOneWith pred
 	=	whileUnchanged myMap 
 			\mymap ->  enterChoice "Assign worker" [] [(i,actor) \\ (i,actor) <- findAllActors mymap | pred actor ]
+
+
+setRoomDetectors :: Task ()
+setRoomDetectors 
+	=				get myMap
+	>>= \map ->		enterChoice "The detectors of which room do you want to set?" [] (findAllRoomNumbers map)
+	>>= \nr	 -> 	getRoomStatus nr myMap
+	>>= \status ->	updateInformation "Set detectors in the room" [] (fromJust status)
+	>>= \nstatus -> updRoomStatus nr (\_ -> nstatus) myMap
+	>>|				setRoomDetectors
+
+
 
 

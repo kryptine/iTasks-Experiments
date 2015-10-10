@@ -46,6 +46,19 @@ findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))]
 
 updActorStatus :: User (a -> a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
+// collect all room numbers of a map
+
+findAllRoomNumbers :: (MAP r o a) ->  [RoomNumber]
+
+// get current status of a room
+
+getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
+
+// update room status, unique room number is used as identification
+
+updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+
+
 
 
 

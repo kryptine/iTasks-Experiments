@@ -52,7 +52,7 @@ addActorToMap :: (Actor o a) RoomNumber (ActorTask r o a) (Shared (MAP r o a)) -
 addActorToMap actor location task smap
 	=			get smap
 	>>= \map -> case (findUser actor.userName map) of
-					Nothing	 	-> 			if (exitsRoom location map)
+					Nothing	 	-> 			if (existsRoom location map)
 									(		updateRoom location (entering actor) smap
 									>>|		viewInformation ("You are in room " <+++ location <+++ ", now you can walk around") [] ()
 									>>|		moveAround actor task smap 
@@ -131,6 +131,19 @@ updActorStatus user upd smap
 where
 	updStatus actor = {actor & actorStatus = upd actor.actorStatus}
 
+// room status updating
+
+getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
+getRoomStatus roomNumber smap 
+	=			get smap
+	>>= \map ->	case [room.roomStatus \\ room <- findAllRooms map] of
+					[] -> return Nothing
+					status -> return (Just (hd status))
+					 
+
+updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+updRoomStatus roomNumber upd smap = updateRoom roomNumber (\room -> {room & roomStatus = upd room.roomStatus}) smap
+
 // room updating utility functions
 
 leaving :: (Actor o a) (Room r o a) -> (Room r o a) | Eq o
@@ -178,6 +191,9 @@ findAllRoomNumbers map = 	[room.number
 							\\ floor <- map, layer <- floor, room <- layer
 							]
 
-exitsRoom :: RoomNumber (MAP r o a) -> Bool
-exitsRoom i map = isMember i (findAllRoomNumbers map)
+findAllRooms :: (MAP r o a) ->  [Room r o a]
+findAllRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
+
+existsRoom :: RoomNumber (MAP r o a) -> Bool
+existsRoom i map = isMember i (findAllRoomNumbers map)
 
