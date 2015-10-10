@@ -81,8 +81,8 @@ handleInstructions map room actor
 			>>= \done -> adjustToDoList actor actor.actorStatus.todo done
 		)
 where
-	adjustToDoList actor todo done
-	# ntodo = removeMembers done todo
+	adjustToDoList actor  todo done
+	# ntodo = removeMembers todo done
 	= return {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
 
 giveInstructions :: Task ()
