@@ -23,12 +23,14 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 :: Instruction	=	FightFireInRoom Int | InspectSmokeInRoom Int | GotoRoom Int 
 :: Priority		=	NormalPriority | HighPriority | Urgent | Vital
 
-
 derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority
 
 instance == Object 		where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
+
+isHigh (FireDetector  b) = b 
+isHigh (SmokeDetector b) = b
 
 myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
@@ -46,6 +48,28 @@ where
 	
 	detectors = [FireDetector False,SmokeDetector False]			
 
+:: Log			=	{ when		:: DateTime
+					, who 		:: String
+					, location  :: String
+					, about		:: String
+					}
+
+myLog :: Shared [Log]
+myLog = sharedStore "myLog" []
+
+derive class iTask Log
+
+addLog :: a b c -> Task () | toString a & toString b & toString c
+addLog who location about
+	=				 get currentDateTime
+	>>= \dateTime -> upd (\log -> [{ who = (toString who), when = dateTime, location = toString location, about = toString about}:log]) myLog
+	>>|				 return ()
+
+showLog :: Task [Log]
+showLog
+	=				viewSharedInformation "Latest loggings..." [ViewWith (take 10)] myLog
+
+
 // tasks on this specific MAP type
 
 Start :: *World -> *World
@@ -54,15 +78,17 @@ Start world
     	[ publish "/"      (WebApp []) (\_-> importDemoUsersFlow >>| loginAndManageWorkList "Adventure" myTasks)
         , publish "/tonic" (WebApp []) (\_-> tonicDashboard [])
 		, publish "/map"   (WebApp []) (\_-> showMap)
+		, publish "/alarm" (WebApp []) (\_-> setRoomDetectors)
+		, publish "/log"   (WebApp []) (\_-> showLog)
         ] world
  
-showMap = 		viewSharedInformation "Map Status" [] myMap 
 
 myTasks :: [Workflow]
-myTasks = 	[	workflow "follow instructions"	"enter map, walk around and follow given instructions"  (get currentUser >>= \me -> actorWithInstructions me)
-			,	workflow "give instructions"	"give instructions to someone in the map" 				giveInstructions			
-			, 	workflow "set room detectors"	"set / reset detectors in a room" 						setRoomDetectors
+myTasks = 	[	workflow "crew member"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
+			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions			
 		 	]
+
+// tasks for an actor
 
 actorWithInstructions :: User  -> Task ()
 actorWithInstructions user 
@@ -78,29 +104,47 @@ handleInstructions map room actor
 			>>| 		return  actor
 		)
 		(				enterMultipleChoice "ToDo list" [] actor.actorStatus.todo 
-			>>= \done -> adjustToDoList actor actor.actorStatus.todo done
+			>>= \done -> adjustToDoList actor room actor.actorStatus.todo done
 		)
 where
-	adjustToDoList actor  todo done
+	adjustToDoList actor room todo done
 	# ntodo = removeMembers todo done
-	= return {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
+	= 		addLog actor.userName room.number ("Completed: " +++ toMultiLineText done)
+	 >>|	return {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
+
+// task for commander
 
 giveInstructions :: Task ()
 giveInstructions 
 	= forever
-	  (		(	selectSomeOne
+	  (		showAlerts
+	  		||-
+	  		(	selectSomeOne
 	  			-&&-
 	  			enterInformation "Define Instructions" []
 			 )	
 	  >>* 	[ OnAction  ActionOk (hasValue (\((roomNumber,actor),instructions) 
-	 									-> 	updActorStatus actor.userName (\st -> {st & occupied = Busy
-	 																				  , todo 	 = instructions ++ st.todo
-	 																			   }) myMap
+	 									-> 	assignInstructions actor instructions
 	 													)
 	 											)
             , OnAction  ActionCancel (always (return ()))
             ]
 	 )
+
+assignInstructions actor instructions
+	= 	updActorStatus actor.userName (\st -> {st & occupied = Busy
+	 										  , todo 	 = instructions ++ st.todo
+	 										  }) myMap
+	>>| addLog "Commander" actor.userName ("To Do :" +++ toMultiLineText instructions)
+
+showAlerts
+	=	whileUnchanged myMap 
+			\mymap ->  let alerts = [ (number,detector)	\\ (number,detectors) <- allRoomStatus mymap
+														,  detector <- detectors
+														| isHigh detector]
+						in if (isEmpty alerts)
+							(viewInformation "No Alerts..." [] [])
+							(viewInformation "ALERTS !!!" [] alerts)
 
 selectSomeOne :: Task (Int,MyActor)
 selectSomeOne 
@@ -117,18 +161,23 @@ selectSomeOneWith pred
 	=	whileUnchanged myMap 
 			\mymap ->  enterChoice "Assign worker" [] [(i,actor) \\ (i,actor) <- findAllActors mymap | pred actor ]
 
+// detection system
 
 setRoomDetectors :: Task ()
 setRoomDetectors 
 	=				get myMap
-	>>= \map ->		enterChoice "The detectors of which room do you want to set?" [] (findAllRoomNumbers map)
+	>>= \map ->		enterChoice "The detectors of which room do you want to set?" [] (allRoomNumbers map)
 	>>= \nr	 -> 	getRoomStatus nr myMap
 	>>= \status ->	updateInformation ("Set detectors in the room number: " <+++ nr) [] (fromJust status)
-	>>*				[ OnAction ActionOk (hasValue (\status -> updRoomStatus nr (\_ -> status) myMap))
+	>>*				[ OnAction ActionOk (hasValue (\status -> 		updRoomStatus nr (\_ -> status) myMap 
+																>>|	addLog "Alert System" ("Room " <+++ nr) (toMultiLineText status)))
 					, OnAction ActionCancel (always (return ()))
 					]
 	>>|				setRoomDetectors
 
+// general map viewing
+
+showMap = 		viewSharedInformation "Map Status" [] myMap 
 
 
 

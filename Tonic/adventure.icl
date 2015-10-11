@@ -135,10 +135,12 @@ where
 
 // room status updating
 
+
+
 getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
 getRoomStatus roomNumber smap 
 	=			get smap
-	>>= \map ->	case [room.roomStatus \\ room <- findAllRooms map | room.number == roomNumber] of
+	>>= \map ->	case [room.roomStatus \\ room <- allRooms map | room.number == roomNumber] of
 					[] -> return Nothing
 					status -> return (Just (hd status))
 					 
@@ -188,14 +190,18 @@ findAllActors map =	[ (room.number,actor)
 					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors 
 					]
 
-findAllRoomNumbers :: (MAP r o a) ->  [RoomNumber]
-findAllRoomNumbers map = 	[room.number
-							\\ floor <- map, layer <- floor, room <- layer
-							]
+allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
+allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
 
-findAllRooms :: (MAP r o a) ->  [Room r o a]
-findAllRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
+
+allRoomNumbers :: (MAP r o a) ->  [RoomNumber]
+allRoomNumbers map = 	[room.number
+						\\ floor <- map, layer <- floor, room <- layer
+						]
+
+allRooms :: (MAP r o a) ->  [Room r o a]
+allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
 
 existsRoom :: RoomNumber (MAP r o a) -> Bool
-existsRoom i map = isMember i (findAllRoomNumbers map)
+existsRoom i map = isMember i (allRoomNumbers map)
 
