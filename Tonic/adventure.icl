@@ -62,37 +62,41 @@ addActorToMap actor location task smap
 
 moveAround :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 moveAround actor task smap
-	= forever (moveOnStep actor task smap)
+	= forever (moveOneStep actor task smap)
 
-moveOnStep :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveOnStep  actor task smap
+moveOneStep :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+moveOneStep  actor task smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
-					(	 (		(		viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
-								 >>*	[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
-										\\ exit <- room.exits
-										]
-										++ 
-										[ OnAction (Action ("Fetch " <+++ object) [])  	(always (pickupObject nactor room object smap))
-										\\ object <- room.inventory
-										]
-										++
-										[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject nactor room object smap))
-										\\ object <- nactor.carrying
-										]
+					(	 (		(    viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
+								 >>*    exitActions room nactor
+                                     ++ inventoryActions room nactor
+								     ++ carryActions room nactor
 								)
 								-||-
 								(				task map room nactor
 								>>= \actor ->	updateRoom room.number (updateActor actor) smap
 								>>|				return ()
 								)
- 
 						)
 			    )
 			)
 where
+    exitActions room nactor
+      = [ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
+        \\ exit <- room.exits
+        ]
+    inventoryActions room nactor
+      = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject nactor room object smap))
+        \\ object <- room.inventory
+        ]
+    carryActions room nactor
+      = [ OnAction (Action ("Drop " <+++ object) []) (always (dropDownObject nactor room object smap))
+        \\ object <- nactor.carrying
+        ]
+
 	pickupObject actor room object smap
 		=				updateRoom room.number (fetchObject object) smap
 		>>|				return {actor & carrying = [object:actor.carrying]}
