@@ -55,19 +55,12 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
   = reconstructSP graph
   where
   reconstructSP :: (Graph r o a) -> [Exit]
-  reconstructSP graph = case 'DIS'.get endRoomNumber graph of
-                          Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
-                                                    Just (_, _, prevRoom) -> case getExit prevRoom endRoomNumber of
-                                                                               [] -> []
-                                                                               [exit : _] -> reconstructSP` graph prevIdx [exit]
-                                                    _                     -> []
-                          _ -> []
-  getExit {exits} to = [e \\ e <- exits | fromExit e == to]
+  reconstructSP graph = reconstructSP` graph endRoomNumber []
   reconstructSP` graph currIdx path
     | currIdx == startRoomNumber = path
     | otherwise = case 'DIS'.get currIdx graph of
                     Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
-                                              Just (_, _, prevRoom) -> case getExit prevRoom currIdx of
+                                              Just (_, _, {exits}) -> case [e \\ e <- exits | fromExit e == currIdx] of
                                                                          [] -> path
                                                                          [exit : _] -> reconstructSP` graph prevIdx [exit : path]
                                               _                     -> path
