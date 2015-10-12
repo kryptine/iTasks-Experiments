@@ -62,10 +62,10 @@ addActorToMap actor location task smap
 
 moveAround :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 moveAround actor task smap
-	= forever (moveOnStep actor task smap)
+	= forever (moveOneStep actor task smap)
 
-moveOnStep :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveOnStep  actor task smap
+moveOneStep :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+moveOneStep  actor task smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
