@@ -42,9 +42,9 @@ where
 	corridor	= {name = "corridor", number = 4, roomStatus = detectors, inventory = [], exits = [North 1, North 2, North 3
 																						   ,South 5, South 6, South 7
 																						   ], actors = []}
-	room4		= {name = "room 4",   number = 5, roomStatus = detectors, inventory = [], exits = [North 4], actors = []}			
-	room5		= {name = "room 5",   number = 6, roomStatus = detectors, inventory = [Blanket], exits = [North 4], actors = []}			
-	room6		= {name = "room 6",   number = 7, roomStatus = detectors, inventory = [FireExtinguisher], exits = [North 4], actors = []}
+	room4		= {name = "room 5",   number = 5, roomStatus = detectors, inventory = [], exits = [North 4], actors = []}			
+	room5		= {name = "room 6",   number = 6, roomStatus = detectors, inventory = [Blanket], exits = [North 4], actors = []}			
+	room6		= {name = "room 7",   number = 7, roomStatus = detectors, inventory = [FireExtinguisher], exits = [North 4], actors = []}
 	
 	detectors = [FireDetector False,SmokeDetector False]			
 
@@ -93,7 +93,7 @@ myTasks = 	[	workflow "crew member"	"enter map, walk around, follow instructions
 actorWithInstructions :: User  -> Task ()
 actorWithInstructions user 
 	=			enterInformation "Which room do you want to start in?" []
-	>>= \loc ->	addActorToMap (newActor user) loc handleInstructions myMap
+	>>= \loc ->	addActorToMap (newActor user) loc myMap
 
 newActor user 			
 	= {userName = user, carrying = [], actorStatus = {todo = [], occupied = Available}}
@@ -111,6 +111,8 @@ where
 	# ntodo = removeMembers todo done
 	= 		addLog actor.userName room.number ("Completed: " +++ toMultiLineText done)
 	 >>|	return {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
+
+
 
 // task for commander
 
@@ -131,11 +133,35 @@ giveInstructions
             ]
 	 )
 
+assignInstructions :: MyActor [(Instruction,Priority)] -> Task ()
 assignInstructions actor instructions
 	= 	updActorStatus actor.userName (\st -> {st & occupied = Busy
 	 										  , todo 	 = instructions ++ st.todo
 	 										  }) myMap
 	>>| addLog "Commander" actor.userName ("To Do :" +++ toMultiLineText instructions)
+	>>| addTasks actor instructions
+
+addTasks :: MyActor [(Instruction,Priority)]  -> Task ()
+addTasks actor [] = return ()
+addTasks actor [(GotoRoom n,prio) : ins]
+		=	whileWalkDoTask actor.userName (gotoTask n) myMap >>| addTasks actor ins
+addTasks actor [(InspectSmokeInRoom n,prio) : ins]
+		=	whileWalkDoTask actor.userName (gotoTask n) myMap >>| addTasks actor ins
+addTasks actor [(FightFireInRoom n,prio) : ins]
+		=	whileWalkDoTask actor.userName (gotoTask n) myMap >>| addTasks actor ins
+
+gotoTask :: Int MyActor MyRoom MyMap -> Task ()
+gotoTask nr curActor curRoom curMap
+		=	viewInformation ("I need to go to room number " <+++ nr) [] ()
+			-||-  
+			if (curRoom.number == nr) 
+					(return ())
+				 	(viewInformation ("I am currently in room " <+++ curRoom.number) [] ())
+			-||-
+			viewInformation ("Shortest path from room " <+++ curRoom.number <+++
+							 " to room " <+++ nr <+++ 
+							 " is " <+++ shortestPath (const 1) curRoom.number nr curMap) [] ()
+
 
 showAlerts
 	=	whileUnchanged myMap 

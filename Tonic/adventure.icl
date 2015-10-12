@@ -34,7 +34,6 @@ import StdMisc
 					, actorStatus	:: a
 					}
 
-:: ActorTask r o a	:== (MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)
 
 derive class iTask Room, Exit, Actor
 
@@ -107,24 +106,24 @@ fromExit (Down i) = i
 
 // moving around in the map
 
-addActorToMap :: (Actor o a) RoomNumber (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addActorToMap actor location task smap
+addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addActorToMap actor location smap
 	=			get smap
 	>>= \map -> case (findUser actor.userName map) of
 					Nothing	 	-> 			if (existsRoom location map)
 									(		updateRoom location (entering actor) smap
 									>>|		viewInformation ("You are in room " <+++ location <+++ ", now you can walk around") [] ()
-									>>|		moveAround actor task smap 
+									>>|		moveAround actor smap 
 									)(		viewInformation ("Room with number: " <+++ location <+++ " does not exist") [] () >>| return ()
 									)
 					Just (loc,me) ->		viewInformation ("You are already in room" <+++ loc) [] () >>| return ()
 
-moveAround :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveAround actor task smap
-	= forever (moveOneStep actor task smap)
+moveAround :: (Actor o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+moveAround actor smap
+	= forever (moveOneStep actor smap) 
 
-moveOneStep :: (Actor o a) ((MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveOneStep  actor task smap
+moveOneStep :: (Actor o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+moveOneStep  actor smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
@@ -133,11 +132,6 @@ moveOneStep  actor task smap
 								 >>*    exitActions room nactor
                                      ++ inventoryActions room nactor
 								     ++ carryActions room nactor
-								)
-								-||-
-								(				task map room nactor
-								>>= \actor ->	updateRoom room.number (updateActor actor) smap
-								>>|				return ()
 								)
 						)
 			    )
@@ -172,6 +166,27 @@ where
 		= 				updateRoom fromRoom (leaving actor) smap
 		>>| 			updateRoom toRoom (entering actor) smap
 		>>|				return ()
+
+
+// perform a task given from outside
+
+whileWalkDoTask :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+whileWalkDoTask user task smap 
+	=				get smap
+	>>= \curMap ->	case findUser user curMap of
+							Nothing 				-> return ()	
+							Just (roomnumber,actor) -> appendTopLevelTaskFor user False 
+														(	whenChanged actor task smap
+														)
+														>>| return ()
+whenChanged actor task smap
+	= whileUnchanged smap
+			(\map -> let room 	= findRoom actor map 
+						 nactor = latestActorStatus actor room
+					 in  task actor room map
+			)
+
+
 
 // room updating
 
