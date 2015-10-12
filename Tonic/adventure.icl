@@ -150,13 +150,8 @@ where
 
 updateRoom :: RoomNumber ((Room r o a) -> (Room r o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a
 updateRoom roomNumber updRoom smap
-	= 	upd (\m -> ['DIS'.alter (fmap updRoom) roomNumber floor \\ floor <- m]) smap //  updateRoom` roomNumber updRoom) smap 
+	= 	upd (\m -> ['DIS'.alter (fmap updRoom) roomNumber floor \\ floor <- m]) smap
 	>>| return ()
-//where 
-	//updateRoom` i upd [] 	  			= []
-	//updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
-	//where
-		//updateThisRoom room = if (i == room.number) (upd room)  room
 
 // actor status opdating
 

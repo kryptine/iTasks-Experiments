@@ -5,8 +5,9 @@ import iTasks
  
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
+import iTasks.API.Extensions.SVG.SVGlet
 import Graphics.Scalable
-
+import qualified Data.List as DL
 import qualified Data.IntMap.Strict as DIS
 from Data.IntMap.Strict import :: IntMap
 
@@ -36,12 +37,30 @@ instance == Priority    where (==) o1 o2 = o1 === o2
 isHigh (FireDetector  b) = b 
 isHigh (SmokeDetector b) = b
 
+mapImage :: !(MAP r o a) *TagSource -> Image m
+mapImage m tsrc = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) (map floorImage m)) Nothing
 
-floorImage = rect (px 100.0) (px 100.0)
+floorImage :: !(Floor r o a) -> Image m
+floorImage floor
+  #! rooms = 'DIS'.foldrWithKey (\_ v acc -> [roomImage v : acc]) [] floor
+  = beside (repeat AtMiddleY) [] rooms Nothing
 
+// Sort rooms from top to bottom, left to right. Assumes rectangular rooms.
+//sortRooms :: (Floor r o a) -> [[RoomNo]]
+//sortRooms floor = sortRooms` floor []
+  //where
+  //sortRooms` floor acc
+  //onlySouthOrSouthAndEast
+
+roomDim =: 32.0
+
+// Assumes rectangluar rooms for now, which of course doesn't hold in general
+roomImage :: !(Room r o a) -> Image m
 roomImage {exits}
-  #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], []) exits
-  = floorImage
+  #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
+  #! widthMul  = toReal (max (max (length northEs) (length southEs)) 1)
+  #! heightMul = toReal (max (max (length eastEs) (length westEs)) 1)
+  = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
   where
   foldExit (North n) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
   foldExit (East n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
@@ -197,7 +216,9 @@ setRoomDetectors
 
 // general map viewing
 
-showMap = 		viewSharedInformation "Map Status" [] (mapRead (map 'DIS'.elems) myMap)
+showMap = viewSharedInformation "Map Status" [imageView mapImage (\_ _ -> Nothing)] myMap
         -||
         (get myMap >>- \m -> viewInformation "Shortest path" [] (shortestPath (const 1) 1 7 m))
+        -||
+        viewSharedInformation "Map Status" [] (mapRead (map 'DIS'.elems) myMap)
 
