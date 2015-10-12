@@ -12,29 +12,6 @@ from Data.Heap import :: Heap
 
 import StdMisc
 
-:: MAP r o a	:== [Floor r o a]
-:: Floor r o a	:==	[[Room r o a]]
-:: Room roomStatus object actorStatus
-				=	{ name		 	:: String
-					, number 	 	:: RoomNumber
-					, exits		 	:: [Exit]
-					, roomStatus	:: roomStatus
-					, inventory	 	:: [object]
-					, actors	 	:: [Actor object actorStatus]
-					}
-:: RoomNumber	:== Int 
-:: Exit			=	North Int
-				|	East Int
-				|	South Int
-				|	West Int
-				|	Up Int
-				|	Down Int
-:: Actor o a	=	{ userName		:: User
-					, carrying		:: [o]
-					, actorStatus	:: a
-					}
-
-:: ActorTask r o a	:== (MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)
 
 derive class iTask Room, Exit, Actor
 
@@ -83,13 +60,13 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
           _ = graph
 
   mkGraph :: !(MAP r o a) -> Graph r o a
-  mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
+  mkGraph playMap = foldl floorToGraph 'DIS'.newMap playMap
     where
-    floorToGraph :: !(Floor r o a) !(Graph r o a) -> Graph r o a
-    floorToGraph floor graph = foldr (\rooms graph -> foldr roomToGraph graph rooms) graph floor
+    floorToGraph :: !(Graph r o a) !(Floor r o a) -> Graph r o a
+    floorToGraph graph floor = 'DIS'.foldrWithKey roomToGraph graph floor
 
-    roomToGraph :: !(Room r o a) !(Graph r o a) -> Graph r o a
-    roomToGraph room=:{number} graph
+    roomToGraph :: !Int !(Room r o a) !(Graph r o a) -> Graph r o a
+    roomToGraph number room graph
       #! dist = if (number == startRoomNumber) 0 67108864
       = 'DIS'.put number (dist, -1, room) graph
 
@@ -171,15 +148,15 @@ where
 
 // room updating
 
-updateRoom :: RoomNumber ((Room r o a)-> (Room r o a)) (Shared (MAP r o a))-> Task () | iTask r & iTask o & iTask a
-updateRoom roomNumber updRoom smap 
-	= 	upd (updateRoom` roomNumber updRoom) smap 
+updateRoom :: RoomNumber ((Room r o a) -> (Room r o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a
+updateRoom roomNumber updRoom smap
+	= 	upd (\m -> ['DIS'.alter (fmap updRoom) roomNumber floor \\ floor <- m]) smap //  updateRoom` roomNumber updRoom) smap 
 	>>| return ()
-where 
-	updateRoom` i upd [] 	  			= []
-	updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
-	where
-		updateThisRoom room = if (i == room.number) (upd room)  room
+//where 
+	//updateRoom` i upd [] 	  			= []
+	//updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
+	//where
+		//updateThisRoom room = if (i == room.number) (upd room)  room
 
 // actor status opdating
 
@@ -231,10 +208,10 @@ findUser user map
 #	found = [(location,actor) \\ (location,actor) <- findAllActors map | actor.userName == user]
 = if (isEmpty found) Nothing (Just (hd found)) 
 
-findRoom :: (Actor o a) (MAP r o a) -> (Room r o a)
+findRoom :: (Actor o a) (MAP r o a) -> Room r o a
 findRoom actor map 
 # rooms	=	[ room
-			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors 
+			\\ floor <- map, (_, room) <- 'DIS'.toList floor, {userName} <- room.actors
 			| actor.userName == userName
 			] 
 = case rooms of 
@@ -246,7 +223,7 @@ latestActorStatus actor room = hd [nactor \\ nactor <- room.actors | nactor.user
 
 findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))]
 findAllActors map =	[ (room.number,actor)
-					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors 
+					\\ floor <- map, (_, room) <- 'DIS'.toList floor, actor <- room.actors 
 					]
 
 allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
@@ -255,11 +232,11 @@ allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
 
 allRoomNumbers :: (MAP r o a) ->  [RoomNumber]
 allRoomNumbers map = 	[room.number
-						\\ floor <- map, layer <- floor, room <- layer
+						\\ floor <- map, (_, room) <- 'DIS'.toList floor
 						]
 
-allRooms :: (MAP r o a) ->  [Room r o a]
-allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
+allRooms :: (MAP r o a) -> [Room r o a]
+allRooms map = [room \\ floor <- map, (_, room) <- 'DIS'.toList floor]
 
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)

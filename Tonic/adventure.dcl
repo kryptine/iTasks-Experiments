@@ -4,9 +4,10 @@ import iTasks
  
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
+from Data.IntMap.Strict import :: IntMap
 
 :: MAP r o a	:== [Floor r o a]
-:: Floor r o a	:==	[[Room r o a]]
+:: Floor r o a	:==	IntMap (Room r o a)
 :: Room roomStatus object actorStatus
 				=	{ name		 	:: String						// just a naam of the room for convenience of orientation
 					, number 	 	:: RoomNumber					// all room numbers should be unique !!	
