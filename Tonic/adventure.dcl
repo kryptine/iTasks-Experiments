@@ -58,6 +58,4 @@ getRoomStatus 	:: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & 
 updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
 
-
-
-
+shortestPath :: (r -> Int) Int Int (MAP r o a) -> [Exit]

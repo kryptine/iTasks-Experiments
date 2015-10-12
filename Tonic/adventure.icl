@@ -5,6 +5,10 @@ import iTasks
  
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
+import qualified Data.IntMap.Strict as DIS
+from Data.IntMap.Strict import :: IntMap
+import qualified Data.Heap as DH
+from Data.Heap import :: Heap
 
 import StdMisc
 
@@ -38,6 +42,61 @@ derive class iTask Room, Exit, Actor
 
 instance == (Actor o a)  where (==) a1 a2 = a1.userName == a2.userName
 
+:: PreviousIdx :== Int
+:: Distance :== Int
+:: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
+:: PQueue :== Heap (Int, Int)
+
+shortestPath :: (r -> Int) Int Int (MAP r o a) -> [Exit]
+shortestPath cost startRoomNumber endRoomNumber allRooms
+  # graph = mkGraph allRooms
+  # queue = 'DH'.singleton (0, startRoomNumber)
+  # graph = findSP cost graph queue
+  = reconstructSP graph
+  where
+  reconstructSP :: (Graph r o a) -> [Exit]
+  reconstructSP graph = reconstructSP` graph endRoomNumber []
+  reconstructSP` graph currIdx path
+    | currIdx == startRoomNumber = path
+    | otherwise = case 'DIS'.get currIdx graph of
+                    Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
+                                              Just (_, _, {exits}) -> case [e \\ e <- exits | fromExit e == currIdx] of
+                                                                         [] -> path
+                                                                         [exit : _] -> reconstructSP` graph prevIdx [exit : path]
+                                              _                     -> path
+                    _ -> path
+
+  findSP :: (r -> Int) (Graph r o a) PQueue -> Graph r o a
+  findSP cost graph queue
+    | 'DH'.null queue = graph
+    | otherwise
+      = case 'DH'.uncons queue of
+          Just ((minDist, minIdx), queue)
+            = case 'DIS'.get minIdx graph of
+                Just (_, _, room=:{exits})
+                  # (graph, queue) = foldr (\exit (graph, queue) -> case 'DIS'.get (fromExit exit) graph of
+                                                                      Just (nDist, nPrevIdx, nRoom)
+                                                                        # alt = minDist + cost nRoom.roomStatus
+                                                                        | alt < nDist
+                                                                          # graph = 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
+                                                                          # queue = 'DH'.insert (alt, nRoom.number) queue
+                                                                          = (graph, queue)
+                                                                        | otherwise = (graph, queue)) (graph, queue) exits
+                  = findSP cost graph queue
+                _ = graph
+          _ = graph
+
+  mkGraph :: (MAP r o a) -> IntMap (Distance, PreviousIdx, Room r o a)
+  mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
+
+  floorToGraph :: (Floor r o a) (IntMap (Distance, PreviousIdx, Room r o a)) -> IntMap (Distance, PreviousIdx, Room r o a)
+  floorToGraph floor graph = foldr (\rooms graph -> foldr roomToGraph graph rooms) graph floor
+
+  roomToGraph :: (Room r o a) (IntMap (Distance, PreviousIdx, Room r o a)) -> IntMap (Distance, PreviousIdx, Room r o a)
+  roomToGraph room=:{number} graph
+    # dist = if (number == startRoomNumber) 0 65536
+    = 'DIS'.put number (dist, -1, room) graph
+
 fromExit :: Exit -> Int
 fromExit (North i) = i
 fromExit (East i) = i
@@ -70,29 +129,33 @@ moveOneStep  actor task smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
-					(	 (		(		viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
-								 >>*	[ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
-										\\ exit <- room.exits
-										]
-										++ 
-										[ OnAction (Action ("Fetch " <+++ object) [])  	(always (pickupObject nactor room object smap))
-										\\ object <- room.inventory
-										]
-										++
-										[ OnAction (Action ("Drop " <+++ object) [])  	(always (dropDownObject nactor room object smap))
-										\\ object <- nactor.carrying
-										]
+					(	 (		(    viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
+								 >>*    exitActions room nactor
+                                     ++ inventoryActions room nactor
+								     ++ carryActions room nactor
 								)
 								-||-
 								(				task map room nactor
 								>>= \actor ->	updateRoom room.number (updateActor actor) smap
 								>>|				return ()
 								)
- 
 						)
 			    )
 			)
 where
+    exitActions room nactor
+      = [ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
+        \\ exit <- room.exits
+        ]
+    inventoryActions room nactor
+      = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject nactor room object smap))
+        \\ object <- room.inventory
+        ]
+    carryActions room nactor
+      = [ OnAction (Action ("Drop " <+++ object) []) (always (dropDownObject nactor room object smap))
+        \\ object <- nactor.carrying
+        ]
+
 	pickupObject actor room object smap
 		=				updateRoom room.number (fetchObject object) smap
 		>>|				return {actor & carrying = [object:actor.carrying]}
