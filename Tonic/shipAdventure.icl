@@ -177,7 +177,7 @@ setRoomDetectors
 
 // general map viewing
 
-showMap = 		viewSharedInformation "Map Status" [] myMap 
-
-
+showMap = 		viewSharedInformation "Map Status" [] myMap
+        -||
+        (get myMap >>- \m -> viewInformation "Shortest path" [] (shortestPath (const 1) 1 7 m))
 
