@@ -46,7 +46,7 @@ MainModule
 		NeverMemoryProfile:	False
 		NeverTimeProfile:	False
 		StrictnessAnalysis:	True
-		ListTypes:	NoTypes
+		ListTypes:	InferredTypes
 		ListAttributes:	True
 		Warnings:	True
 		Verbose:	True
@@ -880,6 +880,20 @@ OtherModules
 			Fusion:	False
 	Module
 		Name:	Data.Generic
+		Dir:	{Application}\iTasks-SDK\Dependencies\clean-platform\src\libraries\OS-Independent
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	NoTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
+		Name:	Data.Heap
 		Dir:	{Application}\iTasks-SDK\Dependencies\clean-platform\src\libraries\OS-Independent
 		Compiler
 			NeverMemoryProfile:	False

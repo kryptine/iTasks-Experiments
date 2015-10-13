@@ -29,8 +29,6 @@ from Data.IntMap.Strict import :: IntMap
 					, actorStatus	:: a							// can be anything
 					}
 
-:: ActorTask r o a	:== (MAP r o a) (Room r o a) (Actor o a) -> Task (Actor o a)
-
 instance == (Actor o a)  
 
 derive class iTask Room, Exit, Actor
@@ -38,7 +36,13 @@ derive class iTask Room, Exit, Actor
 // place an new actor into a room of your shared map after which the actor can move around
 // a task to do needs to be give to the actor
 
-addActorToMap :: (Actor o a) RoomNumber (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+
+:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
+
+
+addTaskWhileWalking :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+
 
 // finds all actors currently walking on the map
 
