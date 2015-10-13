@@ -39,16 +39,17 @@ addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask 
 
 // a new actor tasks can be assigned to a user walking as actor on the map
 
-addTaskWhileWalking :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking :: User User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
 // the actor task will constantly be informed about the latest state of the actor, room, and map
 // return True to stop the task
 
 :: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
 
-// finds all actors currently walking on the map
+// finds all actors currently walking on the map, find all objects in the map
 
-findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))] 
+findAllActors  :: (MAP r o a) -> [(RoomNumber,(Actor o a))] 
+findAllObjects :: (MAP r o a) -> [(RoomNumber,o)]
 
 // update the status of an actor, unique username is used as identification
 

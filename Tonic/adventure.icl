@@ -108,7 +108,7 @@ moveOneStep  actor mbtask smap
 								     ++ carryActions room nactor
 								)
 								-||- 
-								(if (isNothing mbtask) (viewInformation "-" [] False ) ((fromJust mbtask) actor room map))
+								(if (isNothing mbtask) (viewInformation "-" [] () @! False ) ((fromJust mbtask) actor room map))
 								
 						)
 			    )
@@ -147,15 +147,19 @@ where
 
 // perform a task given from outside
 
-addTaskWhileWalking :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addTaskWhileWalking user task smap 
+addTaskWhileWalking :: User User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking fromUser forUser task smap 
 	=				get smap
-	>>= \curMap ->	case findUser user curMap of
+	>>= \curMap ->	case findUser forUser curMap of
 							Nothing 				-> return ()	
-							Just (roomnumber,actor) -> appendTopLevelTaskFor user False 
-														(	moveAround actor (Just task) smap
-														)
-														>>| return ()
+							Just (roomnumber,actor) -> appendTopLevelTaskFor forUser False 
+														(		(			moveAround actor (Just task) smap 
+																			-||-
+																			(fromUser @: (viewInformation ("Stop process ") [] () >>|  return False))
+																)
+																>>= \b -> 	fromUser @: viewInformation ("Process " <+++ if b "terminated normally" "was killed") [] () >>| return ()
+														) @! ()
+														
 
 // room updating
 
@@ -243,6 +247,11 @@ findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))]
 findAllActors map =	[ (room.number,actor)
 					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors
 					]
+
+findAllObjects :: (MAP r o a) -> [(RoomNumber,o)]
+findAllObjects map =	[ (room.number,object)
+						\\ floor <- map, layer <- floor, room <- layer, object <- room.inventory
+						]
 
 allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
 allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]

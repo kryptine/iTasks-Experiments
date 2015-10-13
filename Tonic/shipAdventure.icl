@@ -15,9 +15,9 @@ import qualified Data.List as DL
 :: MyRoom		:== Room RoomStatus Object ActorStatus
 
 :: RoomStatus 	:==	[Detector] 
-:: Detector		= FireDetector Bool 
-				| SmokeDetector Bool
-                | FloodDetector Bool
+:: Detector		= 	FireDetector Bool 
+				| 	SmokeDetector Bool
+                | 	FloodDetector Bool
 :: Object 		= 	FireExtinguisher
 				| 	Blanket
 				| 	Plug
@@ -25,9 +25,10 @@ import qualified Data.List as DL
 					}
 :: Availability	=	Available | NotAvailable | Busy  
 
-:: Instruction	= GotoRoom Int
-                | FightFireInRoom Int | InspectSmokeInRoom Int
-                | PlugLeakInRoom Int | InspectLeakInRoom Int
+:: Instruction	= 	FightFireInRoom Int Object
+                | 	InspectSmokeInRoom Int
+                | 	PlugLeakInRoom Int  Object
+                | 	InspectLeakInRoom Int
 :: Priority		=	NormalPriority | HighPriority | Urgent | Vital
 
 derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority
@@ -161,37 +162,47 @@ newActor user
 
 giveInstructions :: Task ()
 giveInstructions 
-	= forever
-	  (		showAlerts
-	  		||-
-	  		(	selectSomeOne
-	  			-&&-
-	  			enterInformation "Define Instructions" []
-			 )	
-	  >>* 	[ OnAction  ActionOk (hasValue (\((roomNumber,actor),instructions) 
-	 									-> 	assignInstructions actor instructions
-	 													)
-	 											)
-            , OnAction  ActionCancel (always (return ()))
-            ]
-	 )
+	= 				get currentUser
+		>>= \me ->  forever(	(					showAlerts 
+								 >>= \alerts -> 	get myMap
+								 >>= \map ->		(enterChoice "Handle Alarm : " [] alerts 
+								 					-&&-
+													enterChoice "Using Object : " [] (findAllObjects map)
+													-&&-
+													selectSomeOneWith noRestriction)
+	  							)
+	  						>>* [ OnAction  ActionOk     (ifValue isMatching (handleAlert me))
+						        , OnAction  ActionCancel (always (return ()))
+						        ]
+	 						)
 
-assignInstructions :: MyActor [(Instruction,Priority)] -> Task ()
-assignInstructions actor instructions
-	= 	updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
-	>>| addLog "Commander" actor.userName ("To Do :" +++ toMultiLineText instructions)
-	>>| addTasks actor instructions
+isMatching ((i,FireDetector  b),((j,FireExtinguisher),(k,actor))) = True
+isMatching _ = False
 
-addTasks :: MyActor [(Instruction,Priority)]  -> Task ()
-addTasks actor [] = return ()
-addTasks actor [(GotoRoom n,prio) : ins]
-		=		addLog "Commander" actor.userName ("New task: GotoRoom" <+++ n)	
-		>>|		addTaskWhileWalking actor.userName (gotoTask n) myMap >>| addTasks actor ins
-addTasks actor [(InspectSmokeInRoom n,prio) : ins]
-		=	addTaskWhileWalking actor.userName (gotoTask n) myMap >>| addTasks actor ins
-addTasks actor [(FightFireInRoom n,prio) : ins]
-		=	addTaskWhileWalking actor.userName (gotoTask n) myMap >>| addTasks actor ins
+handleAlert user ((i,FireDetector  b),((j,FireExtinguisher),(k,actor)))
+# instruction = FightFireInRoom i FireExtinguisher
+= 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
+ >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
+ >>| 	addTaskWhileWalking user actor.userName (handleFireTask instruction j) myMap
+handleAlert _ _ = return ()
 
+
+
+handleFireTask :: Instruction RoomNumber MyActor MyRoom MyMap -> Task Bool
+handleFireTask (FightFireInRoom nr FireExtinguisher) fnr curActor curRoom curMap
+	=		viewInformation ("Fight Fire in Room : " <+++ nr <+++ "with extinguiser of room " <+++ fnr) []  () @! False
+
+/*
+makeList [] = []
+makeList [(n,FireDetector  b):alerts] = [
+makeList [(n,SmokeDetector b):alerts]
+makeList [(n,FloodDetector b):alerts]
+FightFireInRoom Int Object
+                | 	InspectSmokeInRoom Int
+                | 	PlugLeakInRoom Int  Object
+                | 	InspectLeakInRoom Int
+            
+*/                
 gotoTask :: Int MyActor MyRoom MyMap -> Task Bool
 gotoTask nr curActor curRoom curMap
 		=	(viewInformation ("I need to go to room number " <+++ nr) []  () @! False)
@@ -207,6 +218,7 @@ gotoTask nr curActor curRoom curMap
 							 " is " <+++ shortestPath (const 1) curRoom.number nr curMap) [] () @! False)
 
 
+showAlerts :: Task [(RoomNumber,Detector)]
 showAlerts
 	=	whileUnchanged myMap 
 			\mymap ->  let alerts = [ (number,detector)	\\ (number,detectors) <- allRoomStatus mymap
@@ -215,6 +227,7 @@ showAlerts
 						in if (isEmpty alerts)
 							(viewInformation "No Alerts..." [] [])
 							(viewInformation "ALERTS !!!" [] alerts)
+						>>| return alerts
 
 selectSomeOne :: Task (Int,MyActor)
 selectSomeOne 
@@ -229,7 +242,7 @@ isAvailable actor = actor.actorStatus.occupied ===  Available
 selectSomeOneWith :: ((MyActor) -> Bool) -> Task (Int,MyActor) 
 selectSomeOneWith pred
 	=	whileUnchanged myMap 
-			\mymap ->  enterChoice "Assign worker" [] [(i,actor) \\ (i,actor) <- findAllActors mymap | pred actor ]
+			\mymap ->  enterChoice "Assign Actor" [] [(i,actor) \\ (i,actor) <- findAllActors mymap | pred actor ]
 
 // detection system
 
