@@ -23,7 +23,6 @@ from Data.Func import mapSt
 				| 	Blanket
 				| 	Plug
 :: ActorStatus	= 	{ occupied	:: Availability
-					, todo		:: [(Instruction,Priority)]
 					}
 :: Availability	=	Available | NotAvailable | Busy  
 
@@ -135,7 +134,6 @@ showLog :: Task [Log]
 showLog
 	=				viewSharedInformation "Latest loggings..." [ViewWith (take 10)] myLog
 
-
 // tasks on this specific MAP type
 
 Start :: *World -> *World
@@ -147,10 +145,9 @@ Start world
 		, publish "/alarm" (WebApp []) (\_-> setRoomDetectors)
 		, publish "/log"   (WebApp []) (\_-> showLog)
         ] world
- 
 
 myTasks :: [Workflow]
-myTasks = 	[	workflow "crew member"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
+myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
 			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions			
 		 	]
 
@@ -162,24 +159,8 @@ actorWithInstructions user
 	>>= \loc ->	addActorToMap (newActor user) loc myMap
 
 newActor user 			
-	= {userName = user, carrying = [], actorStatus = {todo = [], occupied = Available}}
+	= {userName = user, carrying = [], actorStatus = {occupied = Available}}
  
-handleInstructions map room actor 
-	= if (isEmpty actor.actorStatus.todo)
-		(				viewInformation "ToDo list is empty" [] () 
-			>>| 		return  actor
-		)
-		(				enterMultipleChoice "ToDo list" [] actor.actorStatus.todo 
-			>>= \done -> adjustToDoList actor room actor.actorStatus.todo done
-		)
-where
-	adjustToDoList actor room todo done
-	# ntodo = removeMembers todo done
-	= 		addLog actor.userName room.number ("Completed: " +++ toMultiLineText done)
-	 >>|	return {actor & actorStatus = {todo = ntodo, occupied = if (isEmpty ntodo) Available actor.actorStatus.occupied}}
-
-
-
 // task for commander
 
 giveInstructions :: Task ()
@@ -201,16 +182,15 @@ giveInstructions
 
 assignInstructions :: MyActor [(Instruction,Priority)] -> Task ()
 assignInstructions actor instructions
-	= 	updActorStatus actor.userName (\st -> {st & occupied = Busy
-	 										  , todo 	 = instructions ++ st.todo
-	 										  }) myMap
+	= 	updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
 	>>| addLog "Commander" actor.userName ("To Do :" +++ toMultiLineText instructions)
 	>>| addTasks actor instructions
 
 addTasks :: MyActor [(Instruction,Priority)]  -> Task ()
 addTasks actor [] = return ()
 addTasks actor [(GotoRoom n,prio) : ins]
-		=	addTaskWhileWalking actor.userName (gotoTask n) myMap >>| addTasks actor ins
+		=		addLog "Commander" actor.userName ("New task: GotoRoom" <+++ n)	
+		>>|		addTaskWhileWalking actor.userName (gotoTask n) myMap >>| addTasks actor ins
 addTasks actor [(InspectSmokeInRoom n,prio) : ins]
 		=	addTaskWhileWalking actor.userName (gotoTask n) myMap >>| addTasks actor ins
 addTasks actor [(FightFireInRoom n,prio) : ins]
@@ -221,7 +201,9 @@ gotoTask nr curActor curRoom curMap
 		=	(viewInformation ("I need to go to room number " <+++ nr) []  () @! False)
 			-||-  
 			if (curRoom.number == nr) 
-					(return True)
+					(	addLog curActor.userName curRoom.number ("Goto stopped, reached room: " <+++ nr)
+					>>| return True
+					)
 				 	(viewInformation ("I am currently in room " <+++ curRoom.number) [] () @! False)
 			-||-
 			(viewInformation ("Shortest path from room " <+++ curRoom.number <+++

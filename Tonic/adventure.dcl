@@ -33,16 +33,18 @@ instance == (Actor o a)
 
 derive class iTask Room, Exit, Actor
 
-// place an new actor into a room of your shared map after which the actor can move around
-// a task to do needs to be give to the actor
+// place an new actor into a room of your shared map after which the actor can freely move around
 
 addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
-:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
-
+// a new actor tasks can be assigned to a user walking as actor on the map
 
 addTaskWhileWalking :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
+// the actor task will constantly be informed about the latest state of the actor, room, and map
+// return True to stop the task
+
+:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
 
 // finds all actors currently walking on the map
 
