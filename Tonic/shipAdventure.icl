@@ -45,7 +45,18 @@ isHigh (FloodDetector b) = b
 mapImage :: !(MyMap, Int) *TagSource -> Image (MyMap, Int)
 mapImage (m, _) tsrc
   #! (floors, tsrc) = mapSt floorImage m tsrc
-  = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
+  #! allFloors      = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
+  #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True), "Fire detected")
+                      , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
+                      , (mkStatusBadgeBackground (FloodDetector True), "Flood detected")
+                      , (mkActorBadgeBackground Available, "Available person")
+                      , (mkActorBadgeBackground NotAvailable, "Unavailable person")
+                      , (mkActorBadgeBackground Busy, "Busy person")
+                      , (mkInventoryBadge [], "Room inventory")
+                      ]
+  #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
+  #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
+  = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
 floorImage :: !MyFloor *TagSource -> *(Image (MyMap, Int), *TagSource)
 floorImage floor [(floorTag, uFloorTag) : tsrc]
@@ -82,30 +93,35 @@ roomImage {number, exits, roomStatus, actors, inventory}
   foldExit (Up n)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [n : upEs], downEs)
   foldExit (Down n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [n : downEs])
 
-  mkStatusBadge (FireDetector  True) acc = [badgeImage <@< { fill = toSVGColor "red"  } : acc]
-  mkStatusBadge (SmokeDetector True) acc = [badgeImage <@< { fill = toSVGColor "grey" } : acc]
-  mkStatusBadge (FloodDetector True) acc = [badgeImage <@< { fill = toSVGColor "blue" } : acc]
-  mkStatusBadge _                    acc = acc
-
-  mkActorBadge {actorStatus = {occupied}, userName, carrying}
-    #! actorBadge  = badgeImage <@< { fill = toSVGColor (case occupied of
-                                                           Available    -> "green"
-                                                           NotAvailable -> "red"
-                                                           Busy         -> "orange")}
-    #! userStr     = toString userName
-    #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
-    #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
-    #! inventory   = if (length carrying > 0)
-                       [mkInventoryBadge carrying]
-                       []
-    = above (repeat AtMiddleX) [] inventory (Just actorBadge)
-
-  mkInventoryBadge xs
-    #! badge = badgeImage <@< { fill = toSVGColor "purple" }
-    #! txt   = text myFontDef (toString (length xs)) <@< { fill = toSVGColor "white" }
-    = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just badge)
-
   onClick number _ (m, _) = (m, number)
+
+mkStatusBadge d acc
+  | isHigh d  = [mkStatusBadgeBackground d : acc]
+  | otherwise = acc
+
+mkStatusBadgeBackground (FireDetector  _) = badgeImage <@< { fill = toSVGColor "red"  }
+mkStatusBadgeBackground (SmokeDetector _) = badgeImage <@< { fill = toSVGColor "grey" }
+mkStatusBadgeBackground (FloodDetector _) = badgeImage <@< { fill = toSVGColor "lightblue" }
+
+mkActorBadge {actorStatus = {occupied}, userName, carrying}
+  #! actorBadge  = mkActorBadgeBackground occupied
+  #! userStr     = toString userName
+  #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
+  #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
+  #! inventory   = if (length carrying > 0)
+                     [mkInventoryBadge carrying]
+                     []
+  = above (repeat AtMiddleX) [] inventory (Just actorBadge)
+
+mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occupied of
+                                                                        Available    -> "green"
+                                                                        NotAvailable -> "red"
+                                                                        Busy         -> "orange")}
+
+mkInventoryBadge xs
+  #! badge = badgeImage <@< { fill = toSVGColor "purple" }
+  #! txt   = text myFontDef (toString (length xs)) <@< { fill = toSVGColor "white" }
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just badge)
 
 badgeImage = rect (px 10.0) (px 10.0) <@< { stroke = toSVGColor "black" }
                                       <@< { strokewidth = px 1.0 }
