@@ -108,7 +108,7 @@ moveOneStep  actor mbtask smap
 								     ++ carryActions room nactor
 								)
 								-||- 
-								(if (isNothing mbtask) (viewInformation "-" [] () @! False ) ((fromJust mbtask) actor room map))
+								(if (isNothing mbtask) (viewInformation "-" [] () @! False ) ((fromJust mbtask) actor room map))  // Why a continue button ???
 								
 						)
 			    )
@@ -147,12 +147,12 @@ where
 
 // perform a task given from outside
 
-addTaskWhileWalking :: User User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addTaskWhileWalking fromUser forUser task smap 
+addTaskWhileWalking :: User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking fromUser forUser title priority task smap 
 	=				get smap
 	>>= \curMap ->	case findUser forUser curMap of
 							Nothing 				-> return ()	
-							Just (roomnumber,actor) -> appendTopLevelTaskFor forUser False 
+							Just (roomnumber,actor) -> appendTopLevelTaskPrioFor forUser title priority False 
 														(		(			moveAround actor (Just task) smap 
 																			-||-
 																			(fromUser @: (viewInformation ("Stop process ") [] () >>|  return False))

@@ -37,9 +37,9 @@ derive class iTask Room, Exit, Actor
 
 addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
-// a new actor tasks can be assigned to a user walking as actor on the map
+// a new actor tasks with indicated priority can be assigned to a user walking as actor on the map
 
-addTaskWhileWalking :: User User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking :: User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
 // the actor task will constantly be informed about the latest state of the actor, room, and map
 // return True to stop the task

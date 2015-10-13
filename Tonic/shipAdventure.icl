@@ -31,7 +31,7 @@ import StdArray
                 | 	InspectSmokeInRoom Int
                 | 	PlugLeakInRoom Int  Object
                 | 	InspectLeakInRoom Int
-:: Priority		=	NormalPriority | HighPriority | Urgent | Vital
+:: Priority		=	Low | Normal | High | Highest
 
 derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority
 
@@ -201,25 +201,27 @@ giveInstructions
 	= 				get currentUser
 		>>= \me ->  forever(	(					showAlerts 
 								 >>= \alerts -> 	get myMap
-								 >>= \map ->		(enterChoice "Handle Alarm : " [] alerts 
+								 >>= \map ->		((enterChoice "Handle Alarm : " [] alerts 
 								 					-&&-
-													enterChoice "Using Object : " [] (findAllObjects map)
+													enterChoice "Using Object : " [] (findAllObjects map))
 													-&&-
-													selectSomeOneWith noRestriction)
+													(enterChoice "With Priority" [] [Low, Normal, High, Highest]
+													-&&-
+													selectSomeOneWith noRestriction))
 	  							)
 	  						>>* [ OnAction  ActionOk     (ifValue isMatching (handleAlert me))
 						        , OnAction  ActionCancel (always (return ()))
 						        ]
 	 						)
 
-isMatching ((i,FireDetector  b),((j,FireExtinguisher),(k,actor))) = True
+isMatching (((i,FireDetector  b),(j,FireExtinguisher)),(priority,(k,actor))) = True
 isMatching _ = False
 
-handleAlert user ((i,FireDetector  b),((j,FireExtinguisher),(k,actor)))
+handleAlert user (((i,FireDetector  b),(j,FireExtinguisher)),(priority,(k,actor)))
 # instruction = FightFireInRoom i FireExtinguisher
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
- >>| 	addTaskWhileWalking user actor.userName (handleFireTask instruction j) myMap
+ >>| 	addTaskWhileWalking user actor.userName ("Fight Fire in Room " <+++ i) (toSingleLineText priority) (handleFireTask instruction j) myMap
 handleAlert _ _ = return ()
 
 
