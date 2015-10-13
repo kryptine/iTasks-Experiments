@@ -65,10 +65,12 @@ roomImage {number, exits, roomStatus, actors, inventory}
   #! statusBadges   = above (repeat AtMiddleX) [] (foldr mkStatusBadge [] roomStatus) Nothing
   #! actorBadges    = above (repeat AtMiddleX) [] (map mkActorBadge actors) Nothing
   #! inventoryBadge = if (length inventory > 0)
-                        (badgeImage <@< { fill = toSVGColor "purple" })
+                        (mkInventoryBadge inventory)
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number)
-  #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom)] [] [statusBadges, actorBadges, roomNo, inventoryBadge] (Just bg)
+  #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom)]
+                              [(px 2.5, px 2.5), (px -2.5, px 2.5), (zero, zero), (px 2.5, px -2.5)]
+                              [statusBadges, actorBadges, roomNo, inventoryBadge] (Just bg)
   #! total          = total <@< { onclick = onClick number, local = False }
   = total
   where
@@ -84,15 +86,25 @@ roomImage {number, exits, roomStatus, actors, inventory}
   mkStatusBadge (FloodDetector True) acc = [badgeImage <@< { fill = toSVGColor "blue" } : acc]
   mkStatusBadge _                    acc = acc
 
-  mkActorBadge {actorStatus = {occupied}} = badgeImage <@< { fill = toSVGColor (case occupied of
-                                                                                  Available    -> "green"
-                                                                                  NotAvailable -> "red"
-                                                                                  Busy         -> "orange")}
+  mkActorBadge {actorStatus = {occupied}, carrying}
+    #! actorBadge = badgeImage <@< { fill = toSVGColor (case occupied of
+                                                          Available    -> "green"
+                                                          NotAvailable -> "red"
+                                                          Busy         -> "orange")}
+    #! allBadges  = if (length carrying > 0)
+                      [actorBadge, mkInventoryBadge carrying]
+                      [actorBadge]
+    = above (repeat AtMiddleX) [] allBadges Nothing
+
+  mkInventoryBadge xs
+    #! badge = badgeImage <@< { fill = toSVGColor "purple" }
+    #! txt   = text myFontDef (toString (length xs)) <@< { fill = toSVGColor "white" }
+    = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just badge)
 
   onClick number _ (m, _) = (m, number)
 
-badgeImage = rect (px 8.0) (px 8.0) <@< { stroke = toSVGColor "black" }
-                                    <@< { strokewidth = px 1.0 }
+badgeImage = rect (px 10.0) (px 10.0) <@< { stroke = toSVGColor "black" }
+                                      <@< { strokewidth = px 1.0 }
 
 myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
