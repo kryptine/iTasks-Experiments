@@ -183,6 +183,13 @@ where
 // room status updating
 
 
+getRoom :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe (Room r o a)) | iTask r & iTask o & iTask a & Eq o
+getRoom roomNumber smap 
+	=			get smap
+	>>= \map ->	case [room \\ room <- allRooms map | room.number == roomNumber] of
+					[] -> return Nothing
+					status -> return (Just (hd status))
+					//[room : _] -> return (Just room)
 
 getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
 getRoomStatus roomNumber smap 
