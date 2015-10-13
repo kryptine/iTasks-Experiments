@@ -58,6 +58,7 @@ allRoomNumbers 	:: (MAP r o a) ->  [RoomNumber]
 allRoomStatus 	:: (MAP r o a) ->  [(RoomNumber,r)]
 
 getRoom :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe (Room r o a)) | iTask r & iTask o & iTask a & Eq o
+getRoomFromMap :: RoomNumber (MAP r o a) -> Maybe (Room r o a) | iTask r & iTask o & iTask a & Eq o
 getRoomStatus 	:: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
 
 // update room status, unique room number is used as identification

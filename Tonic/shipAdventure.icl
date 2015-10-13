@@ -269,9 +269,6 @@ setRoomDetectors
 
 // general map viewing
 
-showMap = (updateInformationWithShared "Map Status" [imageUpdate id mapImage (\_ _ -> Nothing) (const snd)] myMap -1
+showMap = updateInformationWithShared "Map Status" [imageUpdate id mapImage (\_ _ -> Nothing) (const snd)] myMap -1
             >&> withSelection (return ())
-                  (\selRoom -> getRoom selRoom myMap >>- \r -> case r of
-                                                                 Just st -> viewInformation ("Status for room " +++ toString selRoom) [] st @! ()
-                                                                 _ -> viewInformation "No room selected" [] ())
-          )
+                  (\selRoom -> viewSharedInformation "Room status" [ViewWith (getRoomFromMap selRoom)] myMap)
