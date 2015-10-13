@@ -8,24 +8,27 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 import iTasks.API.Extensions.SVG.SVGlet
 import Graphics.Scalable
 import qualified Data.List as DL
-import qualified Data.IntMap.Strict as DIS
-from Data.IntMap.Strict import :: IntMap
 
 :: MyMap		:== MAP RoomStatus Object ActorStatus
 :: MyActor		:== Actor Object ActorStatus
+:: MyFloor		:== Floor RoomStatus Object ActorStatus
 :: MyRoom		:== Room RoomStatus Object ActorStatus
 
 :: RoomStatus 	:==	[Detector] 
-:: Detector		=	FireDetector Bool 
-				| 	SmokeDetector Bool
+:: Detector		= FireDetector Bool 
+				| SmokeDetector Bool
+                | FloodDetector Bool
 :: Object 		= 	FireExtinguisher
 				| 	Blanket
+				| 	Plug
 :: ActorStatus	= 	{ occupied	:: Availability
 					, todo		:: [(Instruction,Priority)]
 					}
 :: Availability	=	Available | NotAvailable | Busy  
 
-:: Instruction	=	FightFireInRoom Int | InspectSmokeInRoom Int | GotoRoom Int 
+:: Instruction	= GotoRoom Int
+                | FightFireInRoom Int | InspectSmokeInRoom Int
+                | PlugLeakInRoom Int | InspectLeakInRoom Int
 :: Priority		=	NormalPriority | HighPriority | Urgent | Vital
 
 derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority
@@ -34,33 +37,32 @@ instance == Object 		where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
 
-isHigh (FireDetector  b) = b 
+isHigh (FireDetector  b) = b
 isHigh (SmokeDetector b) = b
+isHigh (FloodDetector b) = b
 
-mapImage :: !(MAP r o a) *TagSource -> Image m
+mapImage :: !MyMap *TagSource -> Image m
 mapImage m tsrc = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) (map floorImage m)) Nothing
 
-floorImage :: !(Floor r o a) -> Image m
+floorImage :: !MyFloor -> Image m
 floorImage floor
-  #! rooms = 'DIS'.foldrWithKey (\_ v acc -> [roomImage v : acc]) [] floor
-  = beside (repeat AtMiddleY) [] rooms Nothing
+  #! rooms = map (\xs -> beside (repeat AtMiddleY) [] (map roomImage xs) Nothing) floor
+  = above (repeat AtMiddleX) [] rooms Nothing
 
-// Sort rooms from top to bottom, left to right. Assumes rectangular rooms.
-//sortRooms :: (Floor r o a) -> [[RoomNo]]
-//sortRooms floor = sortRooms` floor []
-  //where
-  //sortRooms` floor acc
-  //onlySouthOrSouthAndEast
+roomDim =: 48.0
 
-roomDim =: 32.0
+myFontDef = normalFontDef "Arial" 10.0
 
-// Assumes rectangluar rooms for now, which of course doesn't hold in general
-roomImage :: !(Room r o a) -> Image m
-roomImage {exits}
+roomImage :: !MyRoom -> Image m
+roomImage {number, exits, roomStatus, actors}
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
-  #! widthMul  = toReal (max (max (length northEs) (length southEs)) 1)
-  #! heightMul = toReal (max (max (length eastEs) (length westEs)) 1)
-  = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
+  #! widthMul     = toReal (max (max (length northEs) (length southEs)) 1)
+  #! heightMul    = toReal (max (max (length eastEs) (length westEs)) 1)
+  #! bg           = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
+  #! statusBadges = above (repeat AtMiddleX) [] (foldr mkStatusBadge [] roomStatus) Nothing
+  #! actorBadges  = above (repeat AtMiddleX) [] (map mkActorBadge actors) Nothing
+  #! roomNo       = text myFontDef (toString number)
+  = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY)] [] [statusBadges, actorBadges, roomNo] (Just bg)
   where
   foldExit (North n) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
   foldExit (East n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
@@ -69,12 +71,26 @@ roomImage {exits}
   foldExit (Up n)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [n : upEs], downEs)
   foldExit (Down n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [n : downEs])
 
+  mkStatusBadge (FireDetector  True) acc = [badgeImage <@< { fill = toSVGColor "red"  } : acc]
+  mkStatusBadge (SmokeDetector True) acc = [badgeImage <@< { fill = toSVGColor "grey" } : acc]
+  mkStatusBadge (FloodDetector True) acc = [badgeImage <@< { fill = toSVGColor "blue" } : acc]
+  mkStatusBadge _                    acc = acc
+
+  mkActorBadge {actorStatus = {occupied}} = badgeImage <@< { fill = toSVGColor (case occupied of
+                                                                                  Available    -> "green"
+                                                                                  NotAvailable -> "red"
+                                                                                  Busy         -> "orange")}
+
+badgeImage = rect (px 8.0) (px 8.0) <@< { stroke = toSVGColor "black" }
+                                    <@< { strokewidth = px 1.0 }
+
 myMap  :: Shared MyMap
 myMap = sharedStore "myBuilding" [floor0]
 where
-	floor0  	= 'DIS'.fromList [ (1, room1), (2, room2), (3, room3)
-                                 , (4, corridor)
-                                 , (5, room4), (6, room5), (7, room6)]
+	floor0  	= [ [room1, room2, room3]
+                  , [corridor]
+                  , [room4, room5, room6]
+                  ]
 	room1		= {name = "room 1",   number = 1, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
 	room2		= {name = "room 2",   number = 2, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
 	room3		= {name = "room 3",   number = 3, roomStatus = detectors, inventory = [FireExtinguisher], exits = [South 4], actors = []}
@@ -220,5 +236,5 @@ showMap = viewSharedInformation "Map Status" [imageView mapImage (\_ _ -> Nothin
         -||
         (get myMap >>- \m -> viewInformation "Shortest path" [] (shortestPath (const 1) 1 7 m))
         -||
-        viewSharedInformation "Map Status" [] (mapRead (map 'DIS'.elems) myMap)
+        viewSharedInformation "Map Status" [] myMap
 
