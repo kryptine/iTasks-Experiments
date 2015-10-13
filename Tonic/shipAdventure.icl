@@ -41,10 +41,10 @@ isHigh (FireDetector  b) = b
 isHigh (SmokeDetector b) = b
 isHigh (FloodDetector b) = b
 
-mapImage :: !MyMap *TagSource -> Image m
-mapImage m tsrc = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) (map floorImage m)) Nothing
+mapImage :: !(MyMap, Int) *TagSource -> Image (MyMap, Int)
+mapImage (m, _) tsrc = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) (map floorImage m)) Nothing
 
-floorImage :: !MyFloor -> Image m
+floorImage :: !MyFloor -> Image (MyMap, Int)
 floorImage floor
   #! rooms = map (\xs -> beside (repeat AtMiddleY) [] (map roomImage xs) Nothing) floor
   = above (repeat AtMiddleX) [] rooms Nothing
@@ -53,7 +53,7 @@ roomDim =: 48.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !MyRoom -> Image m
+roomImage :: !MyRoom -> Image (MyMap, Int)
 roomImage {number, exits, roomStatus, actors, inventory}
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
   #! widthMul       = toReal (max (max (length northEs) (length southEs)) 1)
@@ -65,7 +65,9 @@ roomImage {number, exits, roomStatus, actors, inventory}
                         (badgeImage <@< { fill = toSVGColor "purple" })
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number)
-  = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom)] [] [statusBadges, actorBadges, roomNo, inventoryBadge] (Just bg)
+  #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom)] [] [statusBadges, actorBadges, roomNo, inventoryBadge] (Just bg)
+  #! total          = total <@< { onclick = onClick number, local = False }
+  = total
   where
   foldExit (North n) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
   foldExit (East n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
@@ -83,6 +85,8 @@ roomImage {number, exits, roomStatus, actors, inventory}
                                                                                   Available    -> "green"
                                                                                   NotAvailable -> "red"
                                                                                   Busy         -> "orange")}
+
+  onClick number _ (m, _) = (m, number)
 
 badgeImage = rect (px 8.0) (px 8.0) <@< { stroke = toSVGColor "black" }
                                     <@< { strokewidth = px 1.0 }
@@ -235,9 +239,9 @@ setRoomDetectors
 
 // general map viewing
 
-showMap = viewSharedInformation "Map Status" [imageView mapImage (\_ _ -> Nothing)] myMap
-        -||
-        (get myMap >>- \m -> viewInformation "Shortest path" [] (shortestPath (const 1) 1 7 m))
-        -||
-        viewSharedInformation "Map Status" [] myMap
-
+showMap = (updateInformationWithShared "Map Status" [imageUpdate id mapImage (\_ _ -> Nothing) (const snd)] myMap -1
+            >&> withSelection (return ())
+                  (\selRoom -> getRoom selRoom myMap >>- \r -> case r of
+                                                                 Just st -> viewInformation ("Status for room " +++ toString selRoom) [] st @! ()
+                                                                 _ -> viewInformation "No room selected" [] ())
+          )
