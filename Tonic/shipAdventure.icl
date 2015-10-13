@@ -9,6 +9,7 @@ import iTasks.API.Extensions.SVG.SVGlet
 import Graphics.Scalable
 import qualified Data.List as DL
 from Data.Func import mapSt
+import StdArray
 
 :: MyMap		:== MAP RoomStatus Object ActorStatus
 :: MyActor		:== Actor Object ActorStatus
@@ -86,15 +87,18 @@ roomImage {number, exits, roomStatus, actors, inventory}
   mkStatusBadge (FloodDetector True) acc = [badgeImage <@< { fill = toSVGColor "blue" } : acc]
   mkStatusBadge _                    acc = acc
 
-  mkActorBadge {actorStatus = {occupied}, carrying}
-    #! actorBadge = badgeImage <@< { fill = toSVGColor (case occupied of
-                                                          Available    -> "green"
-                                                          NotAvailable -> "red"
-                                                          Busy         -> "orange")}
-    #! allBadges  = if (length carrying > 0)
-                      [actorBadge, mkInventoryBadge carrying]
-                      [actorBadge]
-    = above (repeat AtMiddleX) [] allBadges Nothing
+  mkActorBadge {actorStatus = {occupied}, userName, carrying}
+    #! actorBadge  = badgeImage <@< { fill = toSVGColor (case occupied of
+                                                           Available    -> "green"
+                                                           NotAvailable -> "red"
+                                                           Busy         -> "orange")}
+    #! userStr     = toString userName
+    #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
+    #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
+    #! inventory   = if (length carrying > 0)
+                       [mkInventoryBadge carrying]
+                       []
+    = above (repeat AtMiddleX) [] inventory (Just actorBadge)
 
   mkInventoryBadge xs
     #! badge = badgeImage <@< { fill = toSVGColor "purple" }
