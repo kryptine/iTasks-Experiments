@@ -188,12 +188,13 @@ where
 
 
 getRoom :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe (Room r o a)) | iTask r & iTask o & iTask a & Eq o
-getRoom roomNumber smap 
-	=			get smap
-	>>= \map ->	case [room \\ room <- allRooms map | room.number == roomNumber] of
-					[] -> return Nothing
-					status -> return (Just (hd status))
-					//[room : _] -> return (Just room)
+getRoom roomNumber smap = get smap >>= return o getRoomFromMap roomNumber
+
+getRoomFromMap :: RoomNumber (MAP r o a) -> Maybe (Room r o a) | iTask r & iTask o & iTask a & Eq o
+getRoomFromMap roomNumber m
+	= case [room \\ room <- allRooms m | room.number == roomNumber] of
+	  	[] -> Nothing
+	  	status -> Just (hd status)
 
 getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
 getRoomStatus roomNumber smap 
