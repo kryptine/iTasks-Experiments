@@ -12,28 +12,6 @@ from Data.Heap import :: Heap
 
 import StdMisc
 
-:: MAP r o a	:== [Floor r o a]
-:: Floor r o a	:==	[[Room r o a]]
-:: Room roomStatus object actorStatus
-				=	{ name		 	:: String
-					, number 	 	:: RoomNumber
-					, exits		 	:: [Exit]
-					, roomStatus	:: roomStatus
-					, inventory	 	:: [object]
-					, actors	 	:: [Actor object actorStatus]
-					}
-:: RoomNumber	:== Int 
-:: Exit			=	North Int
-				|	East Int
-				|	South Int
-				|	West Int
-				|	Up Int
-				|	Down Int
-:: Actor o a	=	{ userName		:: User
-					, carrying		:: [o]
-					, actorStatus	:: a
-					}
-
 
 derive class iTask Room, Exit, Actor
 
@@ -42,58 +20,54 @@ derive class iTask Room, Exit, Actor
 instance == (Actor o a)  where (==) a1 a2 = a1.userName == a2.userName
 
 :: PreviousIdx :== Int
+:: NodeIdx     :== Int
 :: Distance :== Int
+:: Weight      :== Int
 :: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
-:: PQueue :== Heap (Int, Int)
 
-shortestPath :: (r -> Int) Int Int (MAP r o a) -> [Exit]
+shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
 shortestPath cost startRoomNumber endRoomNumber allRooms
-  # graph = mkGraph allRooms
-  # queue = 'DH'.singleton (0, startRoomNumber)
-  # graph = findSP cost graph queue
-  = reconstructSP graph
+  = reconstructSP (findSP cost (mkGraph allRooms) ('DH'.singleton (0, startRoomNumber))) endRoomNumber []
   where
-  reconstructSP :: (Graph r o a) -> [Exit]
-  reconstructSP graph = reconstructSP` graph endRoomNumber []
-  reconstructSP` graph currIdx path
+  reconstructSP :: !(Graph r o a) !RoomNumber ![Exit] -> [Exit]
+  reconstructSP graph currIdx path
     | currIdx == startRoomNumber = path
     | otherwise = case 'DIS'.get currIdx graph of
                     Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
                                               Just (_, _, {exits}) -> case [e \\ e <- exits | fromExit e == currIdx] of
-                                                                         [] -> path
-                                                                         [exit : _] -> reconstructSP` graph prevIdx [exit : path]
+                                                                        [] -> path
+                                                                        [exit : _] -> reconstructSP graph prevIdx [exit : path]
                                               _                     -> path
                     _ -> path
 
-  findSP :: (r -> Int) (Graph r o a) PQueue -> Graph r o a
+  findSP :: !(r -> Weight) !(Graph r o a) !(Heap (Distance, NodeIdx)) -> Graph r o a
   findSP cost graph queue
     | 'DH'.null queue = graph
     | otherwise
       = case 'DH'.uncons queue of
           Just ((minDist, minIdx), queue)
             = case 'DIS'.get minIdx graph of
-                Just (_, _, room=:{exits})
-                  # (graph, queue) = foldr (\exit (graph, queue) -> case 'DIS'.get (fromExit exit) graph of
+                Just (_, _, {exits})
+                  #! (graph, queue) = foldr (\exit (graph, queue) -> case 'DIS'.get (fromExit exit) graph of
                                                                       Just (nDist, nPrevIdx, nRoom)
-                                                                        # alt = minDist + cost nRoom.roomStatus
+                                                                         #! alt = minDist + cost nRoom.roomStatus
                                                                         | alt < nDist
-                                                                          # graph = 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
-                                                                          # queue = 'DH'.insert (alt, nRoom.number) queue
-                                                                          = (graph, queue)
+                                                                           = ( 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
+                                                                             , 'DH'.insert (alt, nRoom.number) queue)
                                                                         | otherwise = (graph, queue)) (graph, queue) exits
                   = findSP cost graph queue
                 _ = graph
           _ = graph
 
-  mkGraph :: (MAP r o a) -> IntMap (Distance, PreviousIdx, Room r o a)
-  mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
+  mkGraph :: !(MAP r o a) -> Graph r o a
+  mkGraph playMap = foldl floorToGraph 'DIS'.newMap playMap
+    where
+    floorToGraph :: !(Graph r o a) !(Floor r o a) -> Graph r o a
+    floorToGraph graph floor = 'DIS'.foldrWithKey roomToGraph graph floor
 
-  floorToGraph :: (Floor r o a) (IntMap (Distance, PreviousIdx, Room r o a)) -> IntMap (Distance, PreviousIdx, Room r o a)
-  floorToGraph floor graph = foldr (\rooms graph -> foldr roomToGraph graph rooms) graph floor
-
-  roomToGraph :: (Room r o a) (IntMap (Distance, PreviousIdx, Room r o a)) -> IntMap (Distance, PreviousIdx, Room r o a)
-  roomToGraph room=:{number} graph
-    # dist = if (number == startRoomNumber) 0 65536
+    roomToGraph :: !Int !(Room r o a) !(Graph r o a) -> Graph r o a
+    roomToGraph number room graph
+      #! dist = if (number == startRoomNumber) 0 67108864
     = 'DIS'.put number (dist, -1, room) graph
 
 fromExit :: Exit -> Int
@@ -190,15 +164,10 @@ whenChanged actor task smap
 
 // room updating
 
-updateRoom :: RoomNumber ((Room r o a)-> (Room r o a)) (Shared (MAP r o a))-> Task () | iTask r & iTask o & iTask a
-updateRoom roomNumber updRoom smap 
-	= 	upd (updateRoom` roomNumber updRoom) smap 
+updateRoom :: RoomNumber ((Room r o a) -> (Room r o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a
+updateRoom roomNumber updRoom smap
+	= 	upd (\m -> ['DIS'.alter (fmap updRoom) roomNumber floor \\ floor <- m]) smap
 	>>| return ()
-where 
-	updateRoom` i upd [] 	  			= []
-	updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
-	where
-		updateThisRoom room = if (i == room.number) (upd room)  room
 
 // actor status opdating
 
@@ -250,10 +219,10 @@ findUser user map
 #	found = [(location,actor) \\ (location,actor) <- findAllActors map | actor.userName == user]
 = if (isEmpty found) Nothing (Just (hd found)) 
 
-findRoom :: (Actor o a) (MAP r o a) -> (Room r o a)
+findRoom :: (Actor o a) (MAP r o a) -> Room r o a
 findRoom actor map 
 # rooms	=	[ room
-			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors 
+			\\ floor <- map, (_, room) <- 'DIS'.toList floor, {userName} <- room.actors
 			| actor.userName == userName
 			] 
 = case rooms of 
@@ -265,7 +234,7 @@ latestActorStatus actor room = hd [nactor \\ nactor <- room.actors | nactor.user
 
 findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))]
 findAllActors map =	[ (room.number,actor)
-					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors 
+					\\ floor <- map, (_, room) <- 'DIS'.toList floor, actor <- room.actors 
 					]
 
 allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
@@ -274,11 +243,11 @@ allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
 
 allRoomNumbers :: (MAP r o a) ->  [RoomNumber]
 allRoomNumbers map = 	[room.number
-						\\ floor <- map, layer <- floor, room <- layer
+						\\ floor <- map, (_, room) <- 'DIS'.toList floor
 						]
 
 allRooms :: (MAP r o a) ->  [Room r o a]
-allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
+allRooms map = [room \\ floor <- map, (_, room) <- 'DIS'.toList floor]
 
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)
