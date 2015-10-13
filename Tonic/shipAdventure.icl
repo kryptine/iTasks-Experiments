@@ -8,6 +8,7 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 import iTasks.API.Extensions.SVG.SVGlet
 import Graphics.Scalable
 import qualified Data.List as DL
+from Data.Func import mapSt
 
 :: MyMap		:== MAP RoomStatus Object ActorStatus
 :: MyActor		:== Actor Object ActorStatus
@@ -42,12 +43,15 @@ isHigh (SmokeDetector b) = b
 isHigh (FloodDetector b) = b
 
 mapImage :: !(MyMap, Int) *TagSource -> Image (MyMap, Int)
-mapImage (m, _) tsrc = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) (map floorImage m)) Nothing
+mapImage (m, _) tsrc
+  #! (floors, tsrc) = mapSt floorImage m tsrc
+  = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
 
-floorImage :: !MyFloor -> Image (MyMap, Int)
-floorImage floor
+floorImage :: !MyFloor *TagSource -> *(Image (MyMap, Int), *TagSource)
+floorImage floor [(floorTag, uFloorTag) : tsrc]
   #! rooms = map (\xs -> beside (repeat AtMiddleY) [] (map roomImage xs) Nothing) floor
-  = above (repeat AtMiddleX) [] rooms Nothing
+  #! floor = tag uFloorTag (above (repeat AtMiddleX) [] rooms Nothing)
+  = (skewx (deg -35.0) floor, tsrc)
 
 roomDim =: 48.0
 
