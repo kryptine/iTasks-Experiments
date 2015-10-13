@@ -60,13 +60,13 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
           _ = graph
 
   mkGraph :: !(MAP r o a) -> Graph r o a
-  mkGraph playMap = foldl floorToGraph 'DIS'.newMap playMap
+  mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
     where
-    floorToGraph :: !(Graph r o a) !(Floor r o a) -> Graph r o a
-    floorToGraph graph floor = 'DIS'.foldrWithKey roomToGraph graph floor
+    floorToGraph :: !(Floor r o a) !(Graph r o a) -> Graph r o a
+    floorToGraph floor graph = foldr (\rooms graph -> foldr roomToGraph graph rooms) graph floor
 
-    roomToGraph :: !Int !(Room r o a) !(Graph r o a) -> Graph r o a
-    roomToGraph number room graph
+    roomToGraph :: !(Room r o a) !(Graph r o a) -> Graph r o a
+    roomToGraph room=:{number} graph
       #! dist = if (number == startRoomNumber) 0 67108864
     = 'DIS'.put number (dist, -1, room) graph
 
@@ -87,17 +87,17 @@ addActorToMap actor location smap
 					Nothing	 	-> 			if (existsRoom location map)
 									(		updateRoom location (entering actor) smap
 									>>|		viewInformation ("You are in room " <+++ location <+++ ", now you can walk around") [] ()
-									>>|		moveAround actor smap 
+									>>|		moveAround actor Nothing smap @! () 
 									)(		viewInformation ("Room with number: " <+++ location <+++ " does not exist") [] () >>| return ()
 									)
 					Just (loc,me) ->		viewInformation ("You are already in room" <+++ loc) [] () >>| return ()
 
-moveAround :: (Actor o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveAround actor smap
-	= forever (moveOneStep actor smap) 
+moveAround :: (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveAround actor mbtask smap
+	= 			repeatTask (\_ -> moveOneStep actor mbtask smap) id False
 
-moveOneStep :: (Actor o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-moveOneStep  actor smap
+moveOneStep :: (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveOneStep  actor mbtask smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
@@ -107,6 +107,9 @@ moveOneStep  actor smap
                                      ++ inventoryActions room nactor
 								     ++ carryActions room nactor
 								)
+								-||- 
+								(if (isNothing mbtask) (viewInformation "-" [] False ) ((fromJust mbtask) actor room map))
+								
 						)
 			    )
 			)
@@ -128,46 +131,43 @@ where
 		=				updateRoom room.number (fetchObject object) smap
 		>>|				return {actor & carrying = [object:actor.carrying]}
 		>>= \actor ->	updateRoom room.number (updateActor actor) smap
-		>>|				return ()
+		>>|				return False
 	
 	dropDownObject actor room object smap
 		=				updateRoom room.number (dropObject object) smap
 		>>|				return {actor & carrying = removeMember object actor.carrying}
 		>>= \actor ->	updateRoom room.number (updateActor actor) smap
-		>>|				return ()
+		>>|				return False
 
 	move actor fromRoom toRoom smap
 		= 				updateRoom fromRoom (leaving actor) smap
 		>>| 			updateRoom toRoom (entering actor) smap
-		>>|				return ()
+		>>|				return False
 
 
 // perform a task given from outside
 
-whileWalkDoTask :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-whileWalkDoTask user task smap 
+addTaskWhileWalking :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking user task smap 
 	=				get smap
 	>>= \curMap ->	case findUser user curMap of
 							Nothing 				-> return ()	
 							Just (roomnumber,actor) -> appendTopLevelTaskFor user False 
-														(	whenChanged actor task smap
+														(	moveAround actor (Just task) smap
 														)
 														>>| return ()
-whenChanged actor task smap
-	= whileUnchanged smap
-			(\map -> let room 	= findRoom actor map 
-						 nactor = latestActorStatus actor room
-					 in  task actor room map
-			)
-
-
 
 // room updating
 
 updateRoom :: RoomNumber ((Room r o a) -> (Room r o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a
 updateRoom roomNumber updRoom smap
-	= 	upd (\m -> ['DIS'.alter (fmap updRoom) roomNumber floor \\ floor <- m]) smap
+	= 	upd (updateRoom` roomNumber updRoom) smap 
 	>>| return ()
+where 
+	updateRoom` i upd [] 	  			= []
+	updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
+	where
+		updateThisRoom room = if (i == room.number) (upd room)  room
 
 // actor status opdating
 
@@ -222,7 +222,7 @@ findUser user map
 findRoom :: (Actor o a) (MAP r o a) -> Room r o a
 findRoom actor map 
 # rooms	=	[ room
-			\\ floor <- map, (_, room) <- 'DIS'.toList floor, {userName} <- room.actors
+			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors
 			| actor.userName == userName
 			] 
 = case rooms of 
@@ -234,7 +234,7 @@ latestActorStatus actor room = hd [nactor \\ nactor <- room.actors | nactor.user
 
 findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))]
 findAllActors map =	[ (room.number,actor)
-					\\ floor <- map, (_, room) <- 'DIS'.toList floor, actor <- room.actors 
+					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors
 					]
 
 allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
@@ -243,11 +243,11 @@ allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
 
 allRoomNumbers :: (MAP r o a) ->  [RoomNumber]
 allRoomNumbers map = 	[room.number
-						\\ floor <- map, (_, room) <- 'DIS'.toList floor
+						\\ floor <- map, layer <- floor, room <- layer
 						]
 
 allRooms :: (MAP r o a) ->  [Room r o a]
-allRooms map = [room \\ floor <- map, (_, room) <- 'DIS'.toList floor]
+allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
 
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)

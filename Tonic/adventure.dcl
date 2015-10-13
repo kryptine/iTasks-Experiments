@@ -7,7 +7,7 @@ import iTasks.API.Extensions.Admin.TonicAdmin
 from Data.IntMap.Strict import :: IntMap
 
 :: MAP r o a	:== [Floor r o a]
-:: Floor r o a	:==	IntMap (Room r o a)
+:: Floor r o a	:==	[[Room r o a]]
 :: Room roomStatus object actorStatus
 				=	{ name		 	:: String						// just a naam of the room for convenience of orientation
 					, number 	 	:: RoomNumber					// all room numbers should be unique !!	
@@ -38,10 +38,10 @@ derive class iTask Room, Exit, Actor
 
 addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
-:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task ()
+:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
 
 
-whileWalkDoTask :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking :: User (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
 
 // finds all actors currently walking on the map
