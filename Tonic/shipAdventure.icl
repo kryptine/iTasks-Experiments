@@ -54,15 +54,18 @@ roomDim =: 48.0
 myFontDef = normalFontDef "Arial" 10.0
 
 roomImage :: !MyRoom -> Image m
-roomImage {number, exits, roomStatus, actors}
+roomImage {number, exits, roomStatus, actors, inventory}
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
-  #! widthMul     = toReal (max (max (length northEs) (length southEs)) 1)
-  #! heightMul    = toReal (max (max (length eastEs) (length westEs)) 1)
-  #! bg           = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
-  #! statusBadges = above (repeat AtMiddleX) [] (foldr mkStatusBadge [] roomStatus) Nothing
-  #! actorBadges  = above (repeat AtMiddleX) [] (map mkActorBadge actors) Nothing
-  #! roomNo       = text myFontDef (toString number)
-  = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY)] [] [statusBadges, actorBadges, roomNo] (Just bg)
+  #! widthMul       = toReal (max (max (length northEs) (length southEs)) 1)
+  #! heightMul      = toReal (max (max (length eastEs) (length westEs)) 1)
+  #! bg             = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
+  #! statusBadges   = above (repeat AtMiddleX) [] (foldr mkStatusBadge [] roomStatus) Nothing
+  #! actorBadges    = above (repeat AtMiddleX) [] (map mkActorBadge actors) Nothing
+  #! inventoryBadge = if (length inventory > 0)
+                        (badgeImage <@< { fill = toSVGColor "purple" })
+                        (empty zero zero)
+  #! roomNo         = text myFontDef (toString number)
+  = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom)] [] [statusBadges, actorBadges, roomNo, inventoryBadge] (Just bg)
   where
   foldExit (North n) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
   foldExit (East n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
