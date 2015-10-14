@@ -75,3 +75,4 @@ shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
 lockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
 unlockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+
