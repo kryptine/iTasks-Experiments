@@ -46,7 +46,7 @@ MainModule
 		NeverMemoryProfile:	False
 		NeverTimeProfile:	False
 		StrictnessAnalysis:	True
-		ListTypes:	InferredTypes
+		ListTypes:	NoTypes
 		ListAttributes:	True
 		Warnings:	True
 		Verbose:	True
