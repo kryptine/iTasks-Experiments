@@ -111,7 +111,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! inventory   = if (length carrying > 0)
                      [mkInventoryBadge carrying]
                      []
-  = above (repeat AtMiddleX) [] inventory (Just actorBadge)
+  = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
 mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occupied of
                                                                         Available    -> "green"
