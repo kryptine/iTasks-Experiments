@@ -39,6 +39,14 @@ instance == Object 		where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
 
+shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
+  where
+  cost detectors = 1 + sum (map detectorCost detectors)
+  detectorCost (FireDetector  True) = 50
+  detectorCost (SmokeDetector True) = 25
+  detectorCost (FloodDetector True) = 50
+  detectorCost _                    = 0
+
 isHigh (FireDetector  b) = b
 isHigh (SmokeDetector b) = b
 isHigh (FloodDetector b) = b
@@ -116,7 +124,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
 
 mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occupied of
                                                                         Available    -> "green"
-                                                                        NotAvailable -> "red"
+                                                                        NotAvailable -> "black"
                                                                         Busy         -> "orange")}
 
 mkInventoryBadge xs
@@ -253,7 +261,7 @@ gotoTask nr curActor curRoom curMap
 			-||-
 			(viewInformation ("Shortest path from room " <+++ curRoom.number <+++
 							 " to room " <+++ nr <+++ 
-							 " is " <+++ shortestPath (const 1) curRoom.number nr curMap) [] () @! False)
+							 " is " <+++ shipShortestPath curRoom.number nr curMap) [] () @! False)
 
 
 showAlerts :: Task [(RoomNumber,Detector)]
