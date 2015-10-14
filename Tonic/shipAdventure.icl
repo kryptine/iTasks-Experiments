@@ -35,16 +35,16 @@ import StdArray
 
 derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority
 
-instance == Object 		where (==) o1 o2 = o1 === o2
+instance == Object      where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
 
 shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
   where
   cost detectors = 1 + sum (map detectorCost detectors)
-  detectorCost (FireDetector  True) = 50
-  detectorCost (SmokeDetector True) = 25
-  detectorCost (FloodDetector True) = 50
+  detectorCost (FireDetector  True) = 1000
+  detectorCost (SmokeDetector True) = 250
+  detectorCost (FloodDetector True) = 1000
   detectorCost _                    = 0
 
 isHigh (FireDetector  b) = b
@@ -95,12 +95,12 @@ roomImage {number, exits, roomStatus, actors, inventory}
   #! total          = total <@< { onclick = onClick number, local = False }
   = total
   where
-  foldExit (North n) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
-  foldExit (East n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
-  foldExit (South n) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [n : southEs], westEs, upEs, downEs)
-  foldExit (West n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [n : westEs], upEs, downEs)
-  foldExit (Up n)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [n : upEs], downEs)
-  foldExit (Down n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [n : downEs])
+  foldExit (North n, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
+  foldExit (East n, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
+  foldExit (South n, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [n : southEs], westEs, upEs, downEs)
+  foldExit (West n, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [n : westEs], upEs, downEs)
+  foldExit (Up n, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [n : upEs], downEs)
+  foldExit (Down n, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [n : downEs])
 
   onClick number _ (m, _) = (m, number)
 
@@ -142,15 +142,15 @@ where
                   , [corridor]
                   , [room4, room5, room6]
                   ]
-	room1		= {name = "room 1",   number = 1, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
-	room2		= {name = "room 2",   number = 2, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
-	room3		= {name = "room 3",   number = 3, roomStatus = detectors, inventory = [FireExtinguisher], exits = [South 4], actors = []}
-	corridor	= {name = "corridor", number = 4, roomStatus = detectors, inventory = [], exits = [North 1, North 2, North 3
-																						   ,South 5, South 6, South 7
+	room1		= {name = "room 1",   number = 1, roomStatus = detectors, inventory = [], exits = [(South 4, False)], actors = []}			
+	room2		= {name = "room 2",   number = 2, roomStatus = detectors, inventory = [], exits = [(South 4, False)], actors = []}			
+	room3		= {name = "room 3",   number = 3, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(South 4, False)], actors = []}
+	corridor	= {name = "corridor", number = 4, roomStatus = detectors, inventory = [], exits = [(North 1, False), (North 2, False), (North 3, False)
+																						   , (South 5, False), (South 6, False), (South 7, False)
 																						   ], actors = []}
-	room4		= {name = "room 5",   number = 5, roomStatus = detectors, inventory = [], exits = [North 4], actors = []}			
-	room5		= {name = "room 6",   number = 6, roomStatus = detectors, inventory = [Blanket], exits = [North 4], actors = []}			
-	room6		= {name = "room 7",   number = 7, roomStatus = detectors, inventory = [FireExtinguisher], exits = [North 4], actors = []}
+	room4		= {name = "room 5",   number = 5, roomStatus = detectors, inventory = [], exits = [(North 4, False)], actors = []}			
+	room5		= {name = "room 6",   number = 6, roomStatus = detectors, inventory = [Blanket], exits = [(North 4, False)], actors = []}			
+	room6		= {name = "room 7",   number = 7, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 4, False)], actors = []}
 	
 	detectors = [FireDetector False,SmokeDetector False]			
 

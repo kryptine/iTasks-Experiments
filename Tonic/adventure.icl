@@ -34,10 +34,10 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
     | currIdx == startRoomNumber = path
     | otherwise = case 'DIS'.get currIdx graph of
                     Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
-                                              Just (_, _, {exits}) -> case [e \\ e <- exits | fromExit e == currIdx] of
+                                              Just (_, _, {exits}) -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
                                                                         [] -> path
                                                                         [exit : _] -> reconstructSP graph prevIdx [exit : path]
-                                              _                     -> path
+                                              _                    -> path
                     _ -> path
 
   findSP :: !(r -> Weight) !(Graph r o a) !(Heap (Distance, NodeIdx)) -> Graph r o a
@@ -48,16 +48,20 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
           Just ((minDist, minIdx), queue)
             = case 'DIS'.get minIdx graph of
                 Just (_, _, {exits})
-                  #! (graph, queue) = foldr (\exit (graph, queue) -> case 'DIS'.get (fromExit exit) graph of
-                                                                      Just (nDist, nPrevIdx, nRoom)
-                                                                         #! alt = minDist + cost nRoom.roomStatus
-                                                                        | alt < nDist
-                                                                           = ( 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
-                                                                             , 'DH'.insert (alt, nRoom.number) queue)
-                                                                        | otherwise = (graph, queue)) (graph, queue) exits
+                  #! (graph, queue) = foldr (foldExits minDist minIdx) (graph, queue) exits
                   = findSP cost graph queue
                 _ = graph
           _ = graph
+    where
+    foldExits minDist minIdx (exit, False) (graph, queue)
+      = case 'DIS'.get (fromExit exit) graph of
+          Just (nDist, nPrevIdx, nRoom)
+            #! alt = minDist + cost nRoom.roomStatus
+            | alt < nDist
+              = ( 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
+                , 'DH'.insert (alt, nRoom.number) queue)
+            | otherwise = (graph, queue)
+    foldExits _ _ _ (graph, queue) = (graph, queue)
 
   mkGraph :: !(MAP r o a) -> Graph r o a
   mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
@@ -68,15 +72,15 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
     roomToGraph :: !(Room r o a) !(Graph r o a) -> Graph r o a
     roomToGraph room=:{number} graph
       #! dist = if (number == startRoomNumber) 0 67108864
-    = 'DIS'.put number (dist, -1, room) graph
+      = 'DIS'.put number (dist, -1, room) graph
 
 fromExit :: Exit -> Int
 fromExit (North i) = i
-fromExit (East i) = i
+fromExit (East  i) = i
 fromExit (South i) = i
-fromExit (West i) = i
-fromExit (Up i) = i
-fromExit (Down i) = i
+fromExit (West  i) = i
+fromExit (Up    i) = i
+fromExit (Down  i) = i
 
 // moving around in the map
 
@@ -116,7 +120,7 @@ moveOneStep  actor mbtask smap
 where
     exitActions room nactor
       = [ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
-        \\ exit <- room.exits
+        \\ (exit, _) <- room.exits
         ]
     inventoryActions room nactor
       = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject nactor room object smap))
@@ -186,6 +190,13 @@ where
 
 // room status updating
 
+lockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+lockExit roomNo exit smap = updExit roomNo exit smap True
+
+unlockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+unlockExit roomNo exit smap = updExit roomNo exit smap False
+
+updExit roomNo exit smap locked = updateRoom roomNo (\r -> {r & exits = [if (fromExit e == fromExit exit) (e, locked) el \\ el=:(e, _) <- r.exits]}) smap
 
 getRoom :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe (Room r o a)) | iTask r & iTask o & iTask a & Eq o
 getRoom roomNumber smap = get smap >>= return o getRoomFromMap roomNumber
