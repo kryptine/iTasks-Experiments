@@ -42,7 +42,7 @@ import adventure
 
 derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Priority, Log
 
-instance == Object 		where (==) o1 o2 = o1 === o2
+instance == Object      where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
 
@@ -172,7 +172,7 @@ gotoTask nr curActor curRoom curMap
 
 showMap = updateInformationWithShared "Map Status" [imageUpdate id mapImage (\_ _ -> Nothing) (const snd)] myMap -1
             >&> withSelection (return ())
-                  (\selRoom -> viewSharedInformation "Room status" [ViewWith (getRoomFromMap selRoom)] myMap)
+                  (\selRoom -> viewSharedInformation "Room Status" [ViewWith (getRoomFromMap selRoom)] myMap)
 
 // setting and resetting of the detection systems
 
@@ -204,23 +204,53 @@ showLog
 
 // definition of the ship layout
 
-myShip =[floor0]
+myShip = [floor0, floor1]
 where
-	floor0  	= [ [room1, room2, room3]
-                  , [corridor]
-                  , [room4, room5, room6]
+	floor0  	= [ [back0]
+                  , [room01, room02, room03]
+                  , [corridor0]
+                  , [room04, room05, room06]
+                  , [room07, room08]
+                  , [front0]
                   ]
-	room1		= {name = "room 1",   number = 1, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
-	room2		= {name = "room 2",   number = 2, roomStatus = detectors, inventory = [], exits = [South 4], actors = []}			
-	room3		= {name = "room 3",   number = 3, roomStatus = detectors, inventory = [FireExtinguisher], exits = [South 4], actors = []}
-	corridor	= {name = "corridor", number = 4, roomStatus = detectors, inventory = [], exits = [North 1, North 2, North 3
-																						   ,South 5, South 6, South 7
-																						   ], actors = []}
-	room4		= {name = "room 5",   number = 5, roomStatus = detectors, inventory = [], exits = [North 4], actors = []}			
-	room5		= {name = "room 6",   number = 6, roomStatus = detectors, inventory = [Blanket], exits = [North 4], actors = []}			
-	room6		= {name = "room 7",   number = 7, roomStatus = detectors, inventory = [FireExtinguisher], exits = [North 4], actors = []}
+	back0		= {name = "front 0",    number = 1,  roomStatus = detectors, inventory = [], exits = [(South 2, False), (South 3, False), (South 4, False), (Down 12, False)], actors = []}
+	room01		= {name = "room 0.1",   number = 2,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False)], actors = []}			
+	room02		= {name = "room 0.2",   number = 3,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False)], actors = []}			
+	room03		= {name = "room 0.3",   number = 4,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 1, False), (South 5, False)], actors = []}
+	corridor0	= {name = "corridor 0", number = 5,  roomStatus = detectors, inventory = [], exits = [(North 2, False), (North 3, False), (North 4, False)
+                                                                                                     , (South 6, False), (South 7, False), (South 8, False)
+                                                                                                     , (Down 16, False)
+                                                                                                     ], actors = []}
+	room04		= {name = "room 0.4",   number = 6,  roomStatus = detectors, inventory = [], exits = [(North 5, False), (South 9, False)], actors = []}			
+	room05		= {name = "room 0.5",   number = 7,  roomStatus = detectors, inventory = [Blanket], exits = [(North 5, False), (South 9, False), (South 10, False)], actors = []}			
+	room06		= {name = "room 0.6",   number = 8,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 5, False), (South 10, False)], actors = []}
+	room07		= {name = "room 0.7",   number = 9,  roomStatus = detectors, inventory = [Blanket], exits = [(North 6, False), (North 7, False), (South 11, False)], actors = []}			
+	room08		= {name = "room 0.8",   number = 10, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 7, False), (North 8, False), (South 11, False)], actors = []}
+	front0		= {name = "back 0",     number = 11, roomStatus = detectors, inventory = [], exits = [(North 9, False), (North 10, False), (Down 22, False)], actors = []}
+
+	floor1  	= [ [back1]
+                  , [room11, room12, room13]
+                  , [corridor1]
+                  , [room14, room15, room16]
+                  , [room17, room18]
+                  , [front1]
+                  ]
+	back1		= {name = "front 1",    number = 12, roomStatus = detectors, inventory = [], exits = [(South 13, False), (South 14, False), (South 15, False), (Up 1, False)], actors = []}
+	room11		= {name = "room 1.1",   number = 13, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False)], actors = []}
+	room12		= {name = "room 1.2",   number = 14, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False)], actors = []}
+	room13		= {name = "room 1.3",   number = 15, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 12, False), (South 16, False)], actors = []}
+	corridor1	= {name = "corridor 1", number = 16, roomStatus = detectors, inventory = [], exits = [(North 13, False), (North 14, False), (North 15, False)
+                                                                                                     , (South 17, False), (South 18, False), (South 19, False)
+                                                                                                     , (Up 5, False)
+                                                                                                     ], actors = []}
+	room14		= {name = "room 1.4",   number = 17, roomStatus = detectors, inventory = [], exits = [(North 16, False), (South 20, False)], actors = []}
+	room15		= {name = "room 1.5",   number = 18, roomStatus = detectors, inventory = [Blanket], exits = [(North 16, False), (South 20, False), (South 21, False)], actors = []}
+	room16		= {name = "room 1.6",   number = 19, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 16, False), (South 21, False)], actors = []}
+	room17		= {name = "room 1.7",   number = 20, roomStatus = detectors, inventory = [Blanket], exits = [(North 17, False), (North 18, False), (South 22, False)], actors = []}
+	room18		= {name = "room 1.8",   number = 21, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 18, False), (North 19, False), (South 22, False)], actors = []}
+	front1		= {name = "back 1",     number = 22, roomStatus = detectors, inventory = [], exits = [(North 20, False), (North 21, False), (Up 11, False)], actors = []}
 	
-	detectors = [FireDetector False,SmokeDetector False]			
+	detectors = [FireDetector False,SmokeDetector False]
 
 // utility functions .....
 
@@ -233,9 +263,9 @@ isHigh (FloodDetector b) = b
 shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
   where
   cost detectors = 1 + sum (map detectorCost detectors)
-  detectorCost (FireDetector  True) = 50
-  detectorCost (SmokeDetector True) = 25
-  detectorCost (FloodDetector True) = 50
+  detectorCost (FireDetector  True) = 1000
+  detectorCost (SmokeDetector True) = 250
+  detectorCost (FloodDetector True) = 1000
   detectorCost _                    = 0
 
 // making an image from the map ...
@@ -258,8 +288,8 @@ mapImage (m, _) tsrc
 
 floorImage :: !MyFloor *TagSource -> *(Image (MyMap, Int), *TagSource)
 floorImage floor [(floorTag, uFloorTag) : tsrc]
-  #! rooms = map (\xs -> beside (repeat AtMiddleY) [] (map roomImage xs) Nothing) floor
-  #! floor = tag uFloorTag (above (repeat AtMiddleX) [] rooms Nothing)
+  #! rooms = map (\xs -> above (repeat AtMiddleX) [] (map roomImage xs) Nothing) floor
+  #! floor = tag uFloorTag (beside (repeat AtMiddleY) [] rooms Nothing)
   = (skewx (deg -35.0) floor, tsrc)
 
 roomDim =: 48.0
@@ -267,10 +297,10 @@ roomDim =: 48.0
 myFontDef = normalFontDef "Arial" 10.0
 
 roomImage :: !MyRoom -> Image (MyMap, Int)
-roomImage {number, exits, roomStatus, actors, inventory}
+roomImage room=:{number, exits, roomStatus, actors, inventory}
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
-  #! widthMul       = toReal (max (max (length northEs) (length southEs)) 1)
-  #! heightMul      = toReal (max (max (length eastEs) (length westEs)) 1)
+  #! heightMul      = toReal (max (max (length northEs) (length southEs)) 1)
+  #! widthMul       = toReal (max (max (length eastEs) (length westEs)) 1)
   #! bg             = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
   #! statusBadges   = above (repeat AtMiddleX) [] (foldr mkStatusBadge [] roomStatus) Nothing
   #! actorBadges    = above (repeat AtMiddleX) [] (map mkActorBadge actors) Nothing
@@ -278,20 +308,24 @@ roomImage {number, exits, roomStatus, actors, inventory}
                         (mkInventoryBadge inventory)
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number)
-  #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom)]
-                              [(px 2.5, px 2.5), (px -2.5, px 2.5), (zero, zero), (px 2.5, px -2.5)]
-                              [statusBadges, actorBadges, roomNo, inventoryBadge] (Just bg)
+  #! upDownExits    = above (repeat AtMiddleX) [] (map mkUpDown (upEs ++ downEs)) Nothing
+  #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)]
+                              [(px 2.5, px 2.5), (px -2.5, px 2.5), (zero, zero), (px 2.5, px -2.5), (px -2.5, px -2.5)]
+                              [statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] (Just bg)
   #! total          = total <@< { onclick = onClick number, local = False }
   = total
   where
-  foldExit (North n) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([n : northEs], eastEs, southEs, westEs, upEs, downEs)
-  foldExit (East n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [n : eastEs], southEs, westEs, upEs, downEs)
-  foldExit (South n) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [n : southEs], westEs, upEs, downEs)
-  foldExit (West n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [n : westEs], upEs, downEs)
-  foldExit (Up n)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [n : upEs], downEs)
-  foldExit (Down n)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [n : downEs])
+  foldExit (e=:(North _), _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
+  foldExit (e=:(East _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
+  foldExit (e=:(South _), _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
+  foldExit (e=:(West _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [e : westEs], upEs, downEs)
+  foldExit (e=:(Up _), _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
+  foldExit (e=:(Down _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
   onClick number _ (m, _) = (m, number)
+
+mkUpDown (Up _)   = polygon Nothing [(px 0.0, px 0.0), (px 8.0, px -8.0), (px 8.0, px 0.0)]
+mkUpDown (Down _) = polygon Nothing [(px 0.0, px -8.0), (px 8.0, px 0.0), (px 0.0, px 0.0)]
 
 mkStatusBadge d acc
   | isHigh d  = [mkStatusBadgeBackground d : acc]
@@ -323,3 +357,4 @@ mkInventoryBadge xs
 
 badgeImage = rect (px 10.0) (px 10.0) <@< { stroke = toSVGColor "black" }
                                       <@< { strokewidth = px 1.0 }
+

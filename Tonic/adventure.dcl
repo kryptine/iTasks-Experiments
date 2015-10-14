@@ -11,11 +11,12 @@ from Data.IntMap.Strict import :: IntMap
 :: Room roomStatus object actorStatus
 				=	{ name		 	:: String						// just a naam of the room for convenience of orientation
 					, number 	 	:: RoomNumber					// all room numbers should be unique !!	
-					, exits		 	:: [Exit]						// room without doors (exits) make no sense
+					, exits		 	:: [(Exit, Locked)]				// room without doors (exits) make no sense
 					, roomStatus	:: roomStatus					// can be anything
 					, inventory	 	:: [object]						// can be anyting
 					, actors	 	:: [Actor object actorStatus]	// actors are users who can freely move around the map
 					}
+:: Locked   	:== Bool
 :: RoomNumber	:== Int
 :: Weight       :== Int
 :: Exit			=	North Int
@@ -70,3 +71,8 @@ updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r &
 
 
 shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
+
+lockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+
+unlockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+
