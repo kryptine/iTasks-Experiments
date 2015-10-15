@@ -276,8 +276,8 @@ shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost star
 
 mapImage :: !(!MyMap, !Int) !*TagSource -> Image (!MyMap, !Int)
 mapImage (m, _) tsrc
-  #! (floors, tsrc) = mapSt floorImage m tsrc
-  #! allFloors      = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
+  #! (floors, tsrc) = mapSt floorImage (zip2 m (reverse [0..length m])) tsrc
+  #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
   #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True), "Fire detected")
                       , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
                       , (mkStatusBadgeBackground (FloodDetector True), "Flood detected")
@@ -285,25 +285,27 @@ mapImage (m, _) tsrc
                       , (mkActorBadgeBackground NotAvailable, "Unavailable person")
                       , (mkActorBadgeBackground Busy, "Busy person")
                       , (mkInventoryBadgeBackground, "Room inventory")
-                      , (mkUpDown (Up 0), "Staircase up")
-                      , (mkUpDown (Down 0), "Staircase down")
+                      , (mkUpDown (Up 0, False), "Staircase up")
+                      , (mkUpDown (Down 0, False), "Staircase down")
                       ]
   #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !MyFloor !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
-floorImage floor [(floorTag, uFloorTag) : tsrc]
+floorImage :: !(!MyFloor, !Int) !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
+floorImage (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
-  #! floor         = tag uFloorTag (beside (repeat AtMiddleY) [] rooms Nothing)
-  = (skewx (deg -35.0) (scaley 0.5 floor), tsrc)
+  #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
+  = (floor, tsrc)
+  //= (skewx (deg -35.0) (scaley 0.5 floor), tsrc)
   where
   f :: ![MyRoom] !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
   f rooms tsrc
     #! (rooms`, tsrc) = mapSt (roomImage` False) rooms tsrc
-    = (above (repeat AtMiddleX) [] rooms` Nothing, tsrc)
+    = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 48.0
+exitWidth =: 12.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
@@ -314,38 +316,68 @@ roomImage _ _ _                   = empty zero zero
 roomImage` :: !Bool !MyRoom !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
 roomImage` zoomed room=:{number, exits, roomStatus, actors, inventory} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
-  #! heightMul      = toReal (max (max (length northEs) (length southEs)) 1)
-  #! widthMul       = toReal (max (max (length eastEs) (length westEs)) 1)
-  #! multiplier     = if zoomed 1.75 1.0
-  #! bg             = rect (px (multiplier * roomDim * widthMul)) (px (multiplier * roomDim * heightMul)) <@< { fill = toSVGColor "white" }
+  #! numNorth       = length northEs
+  #! numSouth       = length southEs
+  #! numEast        = length eastEs
+  #! numWest        = length westEs
+  #! widthMul       = toReal (max (max numNorth numSouth) 1)
+  #! heightMul      = toReal (max (max (length eastEs) (length westEs)) 1)
+  #! multiplier     = if zoomed 2.0 1.0
+  #! bgWidth        = multiplier * roomDim * widthMul
+  #! bgHeight       = multiplier * roomDim * heightMul
+  #! bg             = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
   #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge multiplier) [] roomStatus) Nothing
   #! actorBadges    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
-  #! inventoryBadge = case (zoomed, length inventory) of
-                        (False, n) | n > 0 = mkInventoryBadge (toString (length inventory))
-                        (True, _)          = beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing
-                        _                  = empty zero zero
+  #! numInv         = length inventory
+  #! inventoryBadge = if (numInv > 0)
+                        (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
+                        (empty zero zero)
   #! roomNo         = text myFontDef (toString number)
   #! upDownExits    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkUpDown) (upEs ++ downEs)) Nothing
-  #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)]
-                              [(px 2.5, px 2.5), (px -2.5, px 2.5), (zero, zero), (px 2.5, px -2.5), (px -2.5, px -2.5)]
-                              [statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] (Just bg)
+  #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs1 bgWidth numNorth (AtLeft, AtTop) northEs
+  #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs1 bgWidth numSouth (AtLeft, AtBottom) southEs
+  #! (rExitAligns, rExitOffsets, rExitImgs) = mkAsOsIs2 bgHeight numEast (AtRight, AtTop) eastEs
+  #! (lExitAligns, lExitOffsets, lExitImgs) = mkAsOsIs2 bgHeight numWest (AtLeft, AtTop) westEs
+  #! total          = overlay ([(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)] ++ topExitAligns ++ botExitAligns ++ rExitAligns ++ lExitAligns)
+                              ([(px 2.5, px 2.5), (px -2.5, px 2.5), (zero, zero), (px 2.5, px -2.5), (px -2.5, px -2.5)] ++ topExitOffsets ++ botExitOffsets ++ rExitOffsets ++ lExitOffsets)
+                              ([statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
   #! total          = total <@< { onclick = onClick number, local = False }
   = (total, tsrc)
   where
-  foldExit :: !(!Exit, Locked) !(![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit]) -> (![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit])
-  foldExit (e=:(North _), _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
-  foldExit (e=:(East _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
-  foldExit (e=:(South _), _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
-  foldExit (e=:(West _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [e : westEs], upEs, downEs)
-  foldExit (e=:(Up _), _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
-  foldExit (e=:(Down _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
+  //foldExit :: !(!Exit, Locked) !(![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit]) -> (![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit])
+  foldExit e=:(North _, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
+  foldExit e=:(East _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
+  foldExit e=:(South _, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
+  foldExit e=:(West _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [e : westEs], upEs, downEs)
+  foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
+  foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
+
+  mkAsOsIs1 bgWidth num align es
+    #! exitAligns  = repeatn num align
+    #! incr        = bgWidth / toReal (num + 1)
+    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px (n * incr - (exitWidth / 2.0)), px 0.0) : xs], n + 1.0)) ([], 1.0) es)
+    #! exitImgs    = map (mkDoor o snd) es
+    = (exitAligns, exitOffsets, exitImgs)
+    where
+    mkDoor locked = xline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
+                                                 <@< { strokewidth = px 3.0 }
+
+  mkAsOsIs2 bgHeight num align es
+    #! exitAligns  = repeatn num align
+    #! incr        = bgHeight / toReal (num + 1)
+    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px 0.0, px (n * incr - (exitWidth / 2.0))) : xs], n + 1.0)) ([], 1.0) es)
+    #! exitImgs    = map (mkDoor o snd) es
+    = (exitAligns, exitOffsets, exitImgs)
+    where
+    mkDoor locked = yline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
+                                                 <@< { strokewidth = px 3.0 }
 
   onClick :: !Int Int !(!MyMap, Int) -> (!MyMap, !Int)
   onClick number _ (m, _) = (m, number)
 
-mkUpDown :: !Exit -> Image a
-mkUpDown (Up _)   = polygon Nothing [(px 0.0, px 0.0), (px 8.0, px -8.0), (px 8.0, px 0.0)]
-mkUpDown (Down _) = polygon Nothing [(px 0.0, px -8.0), (px 8.0, px 0.0), (px 0.0, px 0.0)]
+mkUpDown :: !(!Exit, Locked) -> Image a
+mkUpDown (Up _, _)   = polygon Nothing [(px 0.0, px 0.0), (px 8.0, px -8.0), (px 8.0, px 0.0)]
+mkUpDown (Down _, _) = polygon Nothing [(px 0.0, px -8.0), (px 8.0, px 0.0), (px 0.0, px 0.0)]
 
 mkStatusBadge :: !Real !Detector ![Image a] -> [Image a]
 mkStatusBadge badgeMult d acc
