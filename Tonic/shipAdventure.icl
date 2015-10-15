@@ -56,6 +56,7 @@ where toString (FireDetector _)  = "Fire Alarm"
 myMap  :: Shared MyMap						// map of the ship
 myMap = sharedStore "myBuilding" myShip
 
+
 myLog :: Shared [Log]						// logging events					
 myLog = sharedStore "myLog" []
 
@@ -91,11 +92,12 @@ where
 
 giveInstructions :: Task ()
 giveInstructions 
+/*
 	= 				get currentUser
 		>>= \me ->  forever
-					(							showAlarms 
+					(							viewAlarms 
 						>>= \alarms -> 			if (isEmpty alarms) (return ())
-						(						enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons id)] alarms 
+						(						enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms 
 						>>= \(location,alarm) -> ( 	selectSomeOneToHandle (location,alarm)
  													-&&-
  													selectObject (location,alarm)
@@ -107,6 +109,45 @@ giveInstructions
 						       					]
 						)
 	 				)
+*/
+	= 				get currentUser
+		>>= \me ->  forever
+					(						viewAlarms 
+						>>= \alarms -> 		if (isEmpty alarms) (return ())
+						( 					(	enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms)
+												>&> withSelection (viewInformation () [] "No choice made yet")
+									 			(\(location,alarm) -> ( selectSomeOneToHandle (location,alarm)
+	 																	-&&-
+ 																		selectObject (location,alarm)
+ 																		-&&- 		
+												  						updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
+																		)
+												>>* 				[ OnAction  ActionOk     (ifValue isMatching (handleAlert me (location,alarm)))
+						       										, OnAction  ActionCancel (always (return ()))
+						       										]
+						       				)
+						)
+	 				)
+
+viewAlarms :: Task [(RoomNumber,Detector)]
+viewAlarms
+	=	whileUnchanged myMap 
+			(\curMap ->  let alarms = [ (number,detector)	\\ (number,detectors) <- allRoomStatus curMap
+														,  detector <- detectors
+														| isHigh detector]
+						 in if (isEmpty alarms)
+								(viewInformation "No alarms..." [] [])
+								(viewInformation "ALARM !!!" [ViewWith (map showAlarm)] alarms)
+						>>| return alarms)
+
+showAlarm (number,detector)
+	= "Room : " <+++ number <+++ " : " <+++ toString detector <+++ " !!! "
+
+selectSomeOneToHandle :: (RoomNumber,Detector) -> Task (Int,MyActor)
+selectSomeOneToHandle (number,detector)
+	=	whileUnchanged myMap 
+			(\curMap ->  enterChoice ("Who should handle: *" <+++ showAlarm (number,detector)) [] 
+							(findAllActors curMap))
 
 isMatching ((k,actor),(mbobject,priority)) = True
 isMatching _ = False
@@ -117,24 +158,6 @@ handleAlert user (i,FireDetector b) ((k,actor),(Just (location,object),priority)
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
  >>| 	addTaskWhileWalking user actor.userName ("Fight Fire in Room " <+++ i) (toSingleLineText priority) (handleFireTask instruction location) myMap
 handleAlert _ _ _ = return ()
-
-showAlarms :: Task [(RoomNumber,Detector)]
-showAlarms
-	=	whileUnchanged myMap 
-			(\curMap ->  let alarms = [ (number,detector)	\\ (number,detectors) <- allRoomStatus curMap
-														,  detector <- detectors
-														| isHigh detector]
-						 in if (isEmpty alarms)
-								(viewInformation "No alarms..." [] [])
-								(viewInformation "ALARM!!!, press Continue to react..." [ViewWith (map (\(i,a) -> "There is a *" <+++ a <+++ "* in Room : " <+++ i))] alarms)
-						>>| return alarms)
-
-selectSomeOneToHandle :: (RoomNumber,Detector) -> Task (Int,MyActor)
-selectSomeOneToHandle (number,detector)
-	=	whileUnchanged myMap 
-			(\curMap ->  enterChoice ("Who should handle the *" <+++ toString detector <+++ "* in Room : " <+++ number) [] 
-							(findAllActors curMap))
-
 
 selectObject :: (RoomNumber,Detector) -> Task (Maybe (RoomNumber,Object))
 selectObject (i,FireDetector _)
@@ -152,7 +175,6 @@ fireFightObjects  map	= [(i,object) \\ (i,object) <- findAllObjects map | object
 handleFireTask :: Instruction RoomNumber MyActor MyRoom MyMap -> Task Bool
 handleFireTask (FightFireInRoom nr FireExtinguisher) fnr curActor curRoom curMap
 	=		viewInformation ("Fight Fire in Room : " <+++ nr <+++ " With extinguiser of room " <+++ fnr) []  () @! False
-
                
 gotoTask :: Int MyActor MyRoom MyMap -> Task Bool
 gotoTask nr curActor curRoom curMap
@@ -179,7 +201,7 @@ showMap = updateInformationWithShared "Map Status" [imageUpdate id mapImage (\_ 
 setRoomDetectors :: Task ()
 setRoomDetectors 
 	=				get myMap
-	>>= \curMap ->		enterChoice "The detectors of which room do you want to set?" [] (allRoomNumbers curMap)
+	>>= \curMap ->	enterChoice "The detectors of which room do you want to set?" [] (allRoomNumbers curMap)
 	>>= \nr	 -> 	getRoomStatus nr myMap
 	>>= \status ->	updateInformation ("Set detectors in the room number: " <+++ nr) [] (fromJust status)
 	>>*				[ OnAction ActionOk (hasValue (\status -> 		updRoomStatus nr (\_ -> status) myMap 
