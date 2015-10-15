@@ -30,9 +30,9 @@ import adventure
 					}
 :: Availability	=	Available | NotAvailable | Busy  
 
-:: Instruction	= 	FightFireInRoom Int Object
+:: Instruction	= 	FightFireInRoom Int 
                 | 	InspectSmokeInRoom Int
-                | 	PlugLeakInRoom Int  Object
+                | 	PlugLeakInRoom Int  
                 | 	InspectLeakInRoom Int
 :: Priority		=	Low | Normal | High | Highest
 
@@ -101,28 +101,28 @@ giveInstructions
 = 				get currentUser
 	>>= \me ->  forever
 				(						showAlarms 
+					>>= \alarms -> 		return (alarms ++ [(1,FireDetector True),(1,FloodDetector True)])	// temp fix for not drawing + testing 
 					>>= \alarms -> 		if (isEmpty alarms) (return ())
 					( 					(							enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms
 											>&> 					withSelection (viewInformation () [] "")
 								 			\(alarmLoc,detector) -> selectSomeOneToHandle (alarmLoc,detector)
 								 			>&>						withSelection (viewInformation () [] "")
-								 			\(actorLoc,actor) ->	selectObject actorLoc (alarmLoc,detector)
+								 			\(actorLoc,actor) ->	viewObject actorLoc (alarmLoc,detector)
 								 			>&>						withSelection (viewInformation () [] "")
-											\mbobject ->			updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
-											>>= \priority ->		return ((actorLoc,actor),(mbobject,priority))
-											>>* 					[ OnAction  ActionOk     (ifValue isMatching (handleAlert me (alarmLoc,detector)))
+											\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
+											>>* 					[ OnAction  ActionOk     (hasValue (handleAlert me (alarmLoc,detector) (actorLoc,actor)))
 					       											, OnAction  ActionCancel (always (return ()))
 					       											]
 					       				)
 					)
  				)
 
-handleAlert user (i,FireDetector b) ((k,actor),(Just (location,object),priority))
-# instruction = FightFireInRoom i FireExtinguisher
+handleAlert user (alarmLoc,FireDetector b) (actorLoc,actor) priority
+# instruction = FightFireInRoom alarmLoc 
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
- >>| 	addTaskWhileWalking mkRoom user actor.userName ("Fight Fire in Room " <+++ i) (toSingleLineText priority) (handleFireTask instruction location) myMap
-handleAlert _ _ _ = return ()
+ >>| 	addTaskWhileWalking mkRoom user actor.userName ("Fight Fire in Room " <+++ alarmLoc) (toSingleLineText priority) (handleFireTask instruction) myMap
+handleAlert _ _ _ _ = return ()
 
 
 mkRoom :: MyRoom -> Task ()
@@ -152,24 +152,35 @@ isMatching ((k,actor),(mbobject,priority)) = True
 isMatching _ = False
 
 
-selectObject :: RoomNumber (RoomNumber,Detector) -> Task (Maybe (RoomNumber,Object))
-selectObject actorLoc (alarmLoc,FireDetector _)
+viewObject :: RoomNumber (RoomNumber,Detector) -> Task ()
+viewObject actorLoc (alarmLoc,FireDetector _)
 	= whileUnchanged myMap 
-			\curMap -> 	enterChoice "Fight Fire with : " [ChooseWith (AutoChoice (\(i,o) -> ("Room : " <+++ i,o,path i actorLoc curMap)))] (fireFightObjects curMap) @ (\object -> Just object)
-selectObject actorLoc (alarmLoc,SmokeDetector _) 
-	= return Nothing
-selectObject actorLoc (alarmLoc,FloodDetector _)  
+			\curMap -> 	let	(nrExt,distExt) 			= statResource FireExtinguisher actorLoc alarmLoc curMap
+							(nrBlankets,distBlankets) 	= statResource Blanket 			actorLoc alarmLoc curMap
+						in	viewInformation "Available Resources:" [] 
+								[ "Nr of FireExtinguishers: " <+++ nrExt <+++ " ; Closest Extinquisher: " <+++ distExt <+++ " Rooms away." 
+								, "Nr of Blankets: "  <+++ nrBlankets <+++ " ; Closest Blanket: " <+++ distBlankets <+++ " Rooms away."
+								] @! ()
+
+viewObject actorLoc (alarmLoc,SmokeDetector _) 
+	= return ()
+viewObject actorLoc (alarmLoc,FloodDetector _)  
 	= whileUnchanged myMap 
-			\curMap -> 	enterChoice "Fight Fire with : " [] (waterFightObjects curMap)  >>= \object -> return (Just object)
+			\curMap -> 	let	(nrPlugs,distPlugs) 		= statResource Plug actorLoc alarmLoc curMap
+						in	viewInformation "Available Resources:" [] 
+								[ "Nr of Plugs: " <+++ nrPlugs <+++ " ; Closest Plug " <+++ distPlugs <+++ " Rooms away."] @! ()
 
 path i j curMap = "at room distance: " <+++ length (shipShortestPath i j curMap)
 
-waterFightObjects map	= [(i,Plug)   \\ (i,Plug)   <- findAllObjects map ]
-fireFightObjects  map	= [(i,object) \\ (i,object) <- findAllObjects map | object == FireExtinguisher || object == Blanket]
+statResource kind actorLoc alarmLoc curMap
+	= (toString numberResources, if (numberResources == 0) "-" (toString (hd (sort stat))))
+	where
+		numberResources = length stat
+		stat 			= [length (shipShortestPath actorLoc alarmLoc curMap) \\ (i,kind) <- findAllObjects curMap]
 
-handleFireTask :: Instruction RoomNumber MyActor MyRoom MyMap -> Task Bool
-handleFireTask (FightFireInRoom nr FireExtinguisher) fnr curActor curRoom curMap
-	=		viewInformation ("Fight Fire in Room : " <+++ nr <+++ " With extinguiser of room " <+++ fnr) []  () @! False
+handleFireTask :: Instruction MyActor MyRoom MyMap -> Task Bool
+handleFireTask (FightFireInRoom nr) curActor curRoom curMap
+	=		viewInformation ("Fight Fire in Room : " <+++ nr) []  () @! False
                
 gotoTask :: Int MyActor MyRoom MyMap -> Task Bool
 gotoTask nr curActor curRoom curMap
