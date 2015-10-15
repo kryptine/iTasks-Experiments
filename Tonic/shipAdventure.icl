@@ -62,6 +62,8 @@ mapImage (m, _) tsrc
                       , (mkActorBadgeBackground NotAvailable, "Unavailable person")
                       , (mkActorBadgeBackground Busy, "Busy person")
                       , (mkInventoryBadge [], "Room inventory")
+                      , (mkUpDown (Up 0), "Staircase up")
+                      , (mkUpDown (Down 0), "Staircase down")
                       ]
   #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
@@ -71,7 +73,7 @@ floorImage :: !MyFloor *TagSource -> *(Image (MyMap, Int), *TagSource)
 floorImage floor [(floorTag, uFloorTag) : tsrc]
   #! rooms = map (\xs -> above (repeat AtMiddleX) [] (map roomImage xs) Nothing) floor
   #! floor = tag uFloorTag (beside (repeat AtMiddleY) [] rooms Nothing)
-  = (skewx (deg -35.0) floor, tsrc)
+  = (skewx (deg -35.0) (scaley 0.5 floor), tsrc)
 
 roomDim =: 48.0
 
