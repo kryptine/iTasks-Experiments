@@ -86,7 +86,7 @@ myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions
 actorWithInstructions :: User  -> Task ()
 actorWithInstructions user 
 	=			enterInformation "Which room do you want to start in?" []
-	>>= \loc ->	addActorToMap (newActor user) loc myMap
+	>>= \loc ->	addActorToMap mkRoom (newActor user) loc myMap
 where
 	newActor user 			
 		= {userName = user, carrying = [], actorStatus = {occupied = Available}}
@@ -119,8 +119,12 @@ handleAlert user (i,FireDetector b) ((k,actor),(Just (location,object),priority)
 # instruction = FightFireInRoom i FireExtinguisher
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
- >>| 	addTaskWhileWalking user actor.userName ("Fight Fire in Room " <+++ i) (toSingleLineText priority) (handleFireTask instruction location) myMap
+ >>| 	addTaskWhileWalking mkRoom user actor.userName ("Fight Fire in Room " <+++ i) (toSingleLineText priority) (handleFireTask instruction location) myMap
 handleAlert _ _ _ = return ()
+
+
+mkRoom :: MyRoom -> Task ()
+mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap -1 @! ()
 
 showAlarms :: Task [(RoomNumber,Detector)]
 showAlarms
@@ -416,6 +420,6 @@ mkInventoryBadgeBackground
   = badgeImage <@< { fill = toSVGColor "purple" }
 
 badgeImage :: Image a
-badgeImage = rect (px 10.0) (px 10.0) <@< { stroke = toSVGColor "black" }
+badgeImage = rect (px 11.0) (px 11.0) <@< { stroke = toSVGColor "black" }
                                       <@< { strokewidth = px 1.0 }
 
