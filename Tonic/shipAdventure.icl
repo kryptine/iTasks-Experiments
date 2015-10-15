@@ -96,42 +96,26 @@ where
 
 giveInstructions :: Task ()
 giveInstructions 
-/*
-	= 				get currentUser
-		>>= \me ->  forever
-					(							viewAlarms 
-						>>= \alarms -> 			if (isEmpty alarms) (return ())
-						(						enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms 
-						>>= \(location,alarm) -> ( 	selectSomeOneToHandle (location,alarm)
- 													-&&-
- 													selectObject (location,alarm)
- 													-&&- 		
-												  	updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
-												)
-						>>* 					[ OnAction  ActionOk     (ifValue isMatching (handleAlert me (location,alarm)))
-						       					, OnAction  ActionCancel (always (return ()))
-						       					]
-						)
-	 				)
-*/
-	= 				get currentUser
-		>>= \me ->  forever
-					(						viewAlarms 
-						>>= \alarms -> 		if (isEmpty alarms) (return ())
-						( 					(	enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms)
-												>&> withSelection (viewInformation () [] "No choice made yet")
-									 			(\(location,alarm) -> ( selectSomeOneToHandle (location,alarm)
-	 																	-&&-
- 																		selectObject (location,alarm)
- 																		-&&- 		
-												  						updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
-																		)
-												>>* 				[ OnAction  ActionOk     (ifValue isMatching (handleAlert me (location,alarm)))
-						       										, OnAction  ActionCancel (always (return ()))
-						       										]
-						       				)
-						)
-	 				)
+= 				get currentUser
+	>>= \me ->  forever
+				(						viewAlarms 
+					>>= \alarms -> 		if (isEmpty alarms) (return ())
+					( 					(							enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms
+											>&> 					withSelection (viewInformation () [] "")
+								 			\(alarmLoc,detector) -> selectSomeOneToHandle (alarmLoc,detector)
+								 			>&>						withSelection (viewInformation () [] "")
+								 			\(actorLoc,actor) ->	selectObject actorLoc (alarmLoc,detector)
+								 			>&>						withSelection (viewInformation () [] "")
+											\mbobject ->			updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
+											>>= \priority ->		return ((actorLoc,actor),(mbobject,priority))
+											>>* 					[ OnAction  ActionOk     (ifValue isMatching (handleAlert me (alarmLoc,detector)))
+					       											, OnAction  ActionCancel (always (return ()))
+					       											]
+					       				)
+					)
+ 				)
+
+undef = undef
 
 viewAlarms :: Task [(RoomNumber,Detector)]
 viewAlarms
@@ -140,18 +124,18 @@ viewAlarms
 														,  detector <- detectors
 														| isHigh detector]
 						 in if (isEmpty alarms)
-								(viewInformation "No alarms..." [] [])
-								(viewInformation "ALARM !!!" [ViewWith (map showAlarm)] alarms)
+								(viewInformation "You have nothing yet to worry about ... Waiting for alarms to go off..." [] [])
+								(viewInformation "There are ALARMS !!!" [ViewWith (map showAlarm)] alarms)
 						>>| return alarms)
 
-showAlarm (number,detector)
-	= "Room : " <+++ number <+++ " : " <+++ toString detector <+++ " !!! "
+showAlarm (alarmLoc,detector)
+	= "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ " !!! "
 
 selectSomeOneToHandle :: (RoomNumber,Detector) -> Task (Int,MyActor)
 selectSomeOneToHandle (number,detector)
 	=	whileUnchanged myMap 
-			(\curMap ->  enterChoice ("Who should handle: *" <+++ showAlarm (number,detector)) [] 
-							(findAllActors curMap))
+			(\curMap ->  let allActors = findAllActors curMap in
+							enterChoice (if (isEmpty allActors) "No one available at all !: : " "Who should handle: " <+++ showAlarm (number,detector)) [] allActors)
 
 isMatching ((k,actor),(mbobject,priority)) = True
 isMatching _ = False
@@ -163,15 +147,17 @@ handleAlert user (i,FireDetector b) ((k,actor),(Just (location,object),priority)
  >>| 	addTaskWhileWalking user actor.userName ("Fight Fire in Room " <+++ i) (toSingleLineText priority) (handleFireTask instruction location) myMap
 handleAlert _ _ _ = return ()
 
-selectObject :: (RoomNumber,Detector) -> Task (Maybe (RoomNumber,Object))
-selectObject (i,FireDetector _)
+selectObject :: RoomNumber (RoomNumber,Detector) -> Task (Maybe (RoomNumber,Object))
+selectObject actorLoc (alarmLoc,FireDetector _)
 	= whileUnchanged myMap 
-			\curMap -> 	enterChoice "Fight Fire with : " [] (fireFightObjects curMap) @ (\object -> Just object)
-selectObject (i,SmokeDetector _) 
+			\curMap -> 	enterChoice "Fight Fire with : " [ChooseWith (AutoChoice (\(i,o) -> ("Room : " <+++ i,o,path i actorLoc curMap)))] (fireFightObjects curMap) @ (\object -> Just object)
+selectObject actorLoc (alarmLoc,SmokeDetector _) 
 	= return Nothing
-selectObject (i,FloodDetector _)  
+selectObject actorLoc (alarmLoc,FloodDetector _)  
 	= whileUnchanged myMap 
 			\curMap -> 	enterChoice "Fight Fire with : " [] (waterFightObjects curMap)  >>= \object -> return (Just object)
+
+path i j curMap = "at room distance: " <+++ length (shipShortestPath i j curMap)
 
 waterFightObjects map	= [(i,Plug)   \\ (i,Plug)   <- findAllObjects map ]
 fireFightObjects  map	= [(i,object) \\ (i,object) <- findAllObjects map | object == FireExtinguisher || object == Blanket]

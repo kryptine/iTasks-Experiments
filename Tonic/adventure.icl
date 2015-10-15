@@ -100,6 +100,7 @@ moveAround :: (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task
 moveAround actor mbtask smap
 	= 			repeatTask (\_ -> moveOneStep actor mbtask smap) id False
 
+
 moveOneStep :: (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
 moveOneStep  actor mbtask smap
 	= whileUnchanged smap
