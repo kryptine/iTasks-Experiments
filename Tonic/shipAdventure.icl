@@ -45,6 +45,10 @@ derive class iTask Detector, Object, ActorStatus, Availability, Instruction, Pri
 instance == Object      where (==) o1 o2 = o1 === o2
 instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
+instance toString Object where
+  toString FireExtinguisher = "Fire extinguiser"
+  toString Blanket          = "Blanket"
+  toString Plug             = "Plug"
 
 instance toString Detector
 where toString (FireDetector _)  = "Fire Alarm"
@@ -172,7 +176,7 @@ gotoTask nr curActor curRoom curMap
 
 showMap = updateInformationWithShared "Map Status" [imageUpdate id mapImage (\_ _ -> Nothing) (const snd)] myMap -1
             >&> withSelection (return ())
-                  (\selRoom -> viewSharedInformation "Room Status" [ViewWith (getRoomFromMap selRoom)] myMap)
+                  (\selRoom -> updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (getRoomFromMap selRoom mp)) (\_ _ -> Nothing) (const snd)] myMap -1)
 
 // setting and resetting of the detection systems
 
@@ -270,7 +274,7 @@ shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost star
 
 // making an image from the map ...
 
-mapImage :: !(MyMap, Int) *TagSource -> Image (MyMap, Int)
+mapImage :: !(!MyMap, !Int) !*TagSource -> Image (!MyMap, !Int)
 mapImage (m, _) tsrc
   #! (floors, tsrc) = mapSt floorImage m tsrc
   #! allFloors      = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
@@ -280,7 +284,7 @@ mapImage (m, _) tsrc
                       , (mkActorBadgeBackground Available, "Available person")
                       , (mkActorBadgeBackground NotAvailable, "Unavailable person")
                       , (mkActorBadgeBackground Busy, "Busy person")
-                      , (mkInventoryBadge [], "Room inventory")
+                      , (mkInventoryBadgeBackground, "Room inventory")
                       , (mkUpDown (Up 0), "Staircase up")
                       , (mkUpDown (Down 0), "Staircase down")
                       ]
@@ -288,35 +292,47 @@ mapImage (m, _) tsrc
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !MyFloor *TagSource -> *(Image (MyMap, Int), *TagSource)
+floorImage :: !MyFloor !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
 floorImage floor [(floorTag, uFloorTag) : tsrc]
-  #! rooms = map (\xs -> above (repeat AtMiddleX) [] (map roomImage xs) Nothing) floor
-  #! floor = tag uFloorTag (beside (repeat AtMiddleY) [] rooms Nothing)
+  #! (rooms, tsrc) = mapSt f floor tsrc
+  #! floor         = tag uFloorTag (beside (repeat AtMiddleY) [] rooms Nothing)
   = (skewx (deg -35.0) (scaley 0.5 floor), tsrc)
+  where
+  f :: ![MyRoom] !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
+  f rooms tsrc
+    #! (rooms`, tsrc) = mapSt (roomImage` False) rooms tsrc
+    = (above (repeat AtMiddleX) [] rooms` Nothing, tsrc)
 
 roomDim =: 48.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !MyRoom -> Image (MyMap, Int)
-roomImage room=:{number, exits, roomStatus, actors, inventory}
+roomImage :: !Bool !(Maybe MyRoom) !*TagSource -> Image (!MyMap, !Int)
+roomImage zoomed (Just room) tsrc = fst (roomImage` zoomed room tsrc)
+roomImage _ _ _                   = empty zero zero
+
+roomImage` :: !Bool !MyRoom !*TagSource -> *(!Image (!MyMap, !Int), !*TagSource)
+roomImage` zoomed room=:{number, exits, roomStatus, actors, inventory} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
   #! heightMul      = toReal (max (max (length northEs) (length southEs)) 1)
   #! widthMul       = toReal (max (max (length eastEs) (length westEs)) 1)
-  #! bg             = rect (px (roomDim * widthMul)) (px (roomDim * heightMul)) <@< { fill = toSVGColor "white" }
-  #! statusBadges   = above (repeat AtMiddleX) [] (foldr mkStatusBadge [] roomStatus) Nothing
-  #! actorBadges    = above (repeat AtMiddleX) [] (map mkActorBadge actors) Nothing
-  #! inventoryBadge = if (length inventory > 0)
-                        (mkInventoryBadge inventory)
-                        (empty zero zero)
+  #! multiplier     = if zoomed 1.75 1.0
+  #! bg             = rect (px (multiplier * roomDim * widthMul)) (px (multiplier * roomDim * heightMul)) <@< { fill = toSVGColor "white" }
+  #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge multiplier) [] roomStatus) Nothing
+  #! actorBadges    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
+  #! inventoryBadge = case (zoomed, length inventory) of
+                        (False, n) | n > 0 = mkInventoryBadge (toString (length inventory))
+                        (True, _)          = beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing
+                        _                  = empty zero zero
   #! roomNo         = text myFontDef (toString number)
-  #! upDownExits    = above (repeat AtMiddleX) [] (map mkUpDown (upEs ++ downEs)) Nothing
+  #! upDownExits    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkUpDown) (upEs ++ downEs)) Nothing
   #! total          = overlay [(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)]
                               [(px 2.5, px 2.5), (px -2.5, px 2.5), (zero, zero), (px 2.5, px -2.5), (px -2.5, px -2.5)]
                               [statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] (Just bg)
   #! total          = total <@< { onclick = onClick number, local = False }
-  = total
+  = (total, tsrc)
   where
+  foldExit :: !(!Exit, Locked) !(![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit]) -> (![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit])
   foldExit (e=:(North _), _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
   foldExit (e=:(East _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
   foldExit (e=:(South _), _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
@@ -324,39 +340,50 @@ roomImage room=:{number, exits, roomStatus, actors, inventory}
   foldExit (e=:(Up _), _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
   foldExit (e=:(Down _), _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
+  onClick :: !Int Int !(!MyMap, Int) -> (!MyMap, !Int)
   onClick number _ (m, _) = (m, number)
 
+mkUpDown :: !Exit -> Image a
 mkUpDown (Up _)   = polygon Nothing [(px 0.0, px 0.0), (px 8.0, px -8.0), (px 8.0, px 0.0)]
 mkUpDown (Down _) = polygon Nothing [(px 0.0, px -8.0), (px 8.0, px 0.0), (px 0.0, px 0.0)]
 
-mkStatusBadge d acc
-  | isHigh d  = [mkStatusBadgeBackground d : acc]
+mkStatusBadge :: !Real !Detector ![Image a] -> [Image a]
+mkStatusBadge badgeMult d acc
+  | isHigh d  = [scale badgeMult badgeMult (mkStatusBadgeBackground d) : acc]
   | otherwise = acc
 
+mkStatusBadgeBackground :: !Detector -> Image a
 mkStatusBadgeBackground (FireDetector  _) = badgeImage <@< { fill = toSVGColor "red"  }
 mkStatusBadgeBackground (SmokeDetector _) = badgeImage <@< { fill = toSVGColor "grey" }
 mkStatusBadgeBackground (FloodDetector _) = badgeImage <@< { fill = toSVGColor "lightblue" }
 
+mkActorBadge :: !MyActor -> Image a
 mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! actorBadge  = mkActorBadgeBackground occupied
   #! userStr     = toString userName
   #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
   #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
   #! inventory   = if (length carrying > 0)
-                     [mkInventoryBadge carrying]
+                     [mkInventoryBadge (toString (length carrying))]
                      []
   = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
+mkActorBadgeBackground :: !Availability -> Image a
 mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occupied of
                                                                         Available    -> "green"
                                                                         NotAvailable -> "black"
                                                                         Busy         -> "orange")}
 
-mkInventoryBadge xs
-  #! badge = badgeImage <@< { fill = toSVGColor "purple" }
-  #! txt   = text myFontDef (toString (length xs)) <@< { fill = toSVGColor "white" }
-  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just badge)
+mkInventoryBadge :: !String -> Image b
+mkInventoryBadge str
+  #! txt   = text myFontDef str <@< { fill = toSVGColor "white" }
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just mkInventoryBadgeBackground)
 
+mkInventoryBadgeBackground :: Image b
+mkInventoryBadgeBackground
+  = badgeImage <@< { fill = toSVGColor "purple" }
+
+badgeImage :: Image a
 badgeImage = rect (px 10.0) (px 10.0) <@< { stroke = toSVGColor "black" }
                                       <@< { strokewidth = px 1.0 }
 
