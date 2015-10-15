@@ -368,7 +368,7 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
                               ([statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
   = (total, tsrc)
   where
-  //foldExit :: !(!Exit, Locked) !(![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit]) -> (![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit])
+  foldExit :: !(!Exit, !Locked) !(![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)]) -> (![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)])
   foldExit e=:(North _, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
   foldExit e=:(East _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
   foldExit e=:(South _, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
@@ -376,6 +376,7 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
   foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
   foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
+  mkAsOsIs1 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
   mkAsOsIs1 bgWidth num align es
     #! exitAligns  = repeatn num align
     #! incr        = bgWidth / toReal (num + 1)
@@ -383,9 +384,11 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
     #! exitImgs    = map (mkDoor o snd) es
     = (exitAligns, exitOffsets, exitImgs)
     where
+    mkDoor :: !Locked -> Image (!MyMap, !MapClick)
     mkDoor locked = xline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
                                                  <@< { strokewidth = px 3.0 }
 
+  mkAsOsIs2 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
   mkAsOsIs2 bgHeight num align es
     #! exitAligns  = repeatn num align
     #! incr        = bgHeight / toReal (num + 1)
@@ -393,6 +396,7 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
     #! exitImgs    = map (mkDoor o snd) es
     = (exitAligns, exitOffsets, exitImgs)
     where
+    mkDoor :: !Locked -> Image (!MyMap, !MapClick)
     mkDoor locked = yline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
                                                  <@< { strokewidth = px 3.0 }
 
