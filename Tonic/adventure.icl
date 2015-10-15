@@ -84,30 +84,29 @@ fromExit (Down  i) = i
 
 // moving around in the map
 
-addActorToMap :: (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addActorToMap actor location smap
+addActorToMap :: ((Room r o a) -> Task ()) (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addActorToMap roomViz actor location smap
 	=			get smap
 	>>= \map -> case (findUser actor.userName map) of
 					Nothing	 	-> 			if (existsRoom location map)
 									(		updateRoom location (entering actor) smap
 									>>|		viewInformation ("You are in room " <+++ location <+++ ", now you can walk around") [] ()
-									>>|		moveAround actor Nothing smap @! () 
+									>>|		moveAround roomViz actor Nothing smap @! () 
 									)(		viewInformation ("Room with number: " <+++ location <+++ " does not exist") [] () >>| return ()
 									)
 					Just (loc,me) ->		viewInformation ("You are already in room" <+++ loc) [] () >>| return ()
 
-moveAround :: (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
-moveAround actor mbtask smap
-	= 			repeatTask (\_ -> moveOneStep actor mbtask smap) id False
+moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveAround roomViz actor mbtask smap
+	= 			repeatTask (\_ -> moveOneStep roomViz actor mbtask smap) id False
 
-
-moveOneStep :: (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
-moveOneStep  actor mbtask smap
+moveOneStep :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveOneStep roomViz actor mbtask smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
-					(	 (		(    viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
+					(	 (		( roomViz room //    viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
 								 >>*    exitActions room nactor
                                      ++ inventoryActions room nactor
 								     ++ carryActions room nactor
@@ -152,13 +151,13 @@ where
 
 // perform a task given from outside
 
-addTaskWhileWalking :: User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addTaskWhileWalking fromUser forUser title priority task smap 
+addTaskWhileWalking :: ((Room r o a) -> Task ()) User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addTaskWhileWalking roomViz fromUser forUser title priority task smap 
 	=				get smap
 	>>= \curMap ->	case findUser forUser curMap of
 							Nothing 				-> return ()	
 							Just (roomnumber,actor) -> appendTopLevelTaskPrioFor forUser title priority False 
-														(		(			moveAround actor (Just task) smap 
+														(		(			moveAround roomViz actor (Just task) smap 
 																			-||-
 																			(fromUser @: (viewInformation ("Stop process ") [] () >>|  return False))
 																)
