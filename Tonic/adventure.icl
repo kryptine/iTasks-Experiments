@@ -156,14 +156,14 @@ addTaskWhileWalking roomViz fromUser forUser title priority task smap
 	=				get smap
 	>>= \curMap ->	case findUser forUser curMap of
 							Nothing 				-> return ()	
-							Just (roomnumber,actor) -> appendTopLevelTaskPrioFor forUser title priority False 
-														(		(			moveAround roomViz actor (Just task) smap 
-																			-||-
-																			(fromUser @: (viewInformation ("Stop process ") [] () >>|  return False))
-																)
-																>>= \b -> 	fromUser @: viewInformation ("Process " <+++ if b "terminated normally" "was killed") [] () >>| return ()
-														) @! ()
-														
+							Just (roomnumber,actor) -> ((forUser @: 	moveAround roomViz actor (Just task) smap) 
+														 >>|			viewInformation ("Task " <+++ title <+++ " terminated normally") [] () 
+														 >>|			return ()
+														)
+														-||-	
+														(				viewInformation ("Kill task " <+++ title <+++ "...") [] ()
+														 >>|			return ()
+														 )
 
 // room updating
 
