@@ -119,7 +119,7 @@ moveOneStep roomViz actor mbtask smap
 			)
 where
     exitActions room nactor
-      = [ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
+      = [ OnAction (Action ("Go " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
         \\ (exit, _) <- room.exits
         ]
     inventoryActions room nactor
@@ -151,19 +151,6 @@ where
 
 // perform a task given from outside
 
-addTaskWhileWalking :: ((Room r o a) -> Task ()) User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addTaskWhileWalking roomViz fromUser forUser title priority task smap 
-	=				get smap
-	>>= \curMap ->	case findUser forUser curMap of
-							Nothing 				-> return ()	
-							Just (roomnumber,actor) -> appendTopLevelTaskPrioFor forUser title priority False 
-														(		(			moveAround roomViz actor (Just task) smap 
-																			-||-
-																			(fromUser @: (viewInformation ("Stop process ") [] () >>|  return False))
-																)
-																>>= \b -> 	fromUser @: viewInformation ("Process " <+++ if b "terminated normally" "was killed") [] () >>| return ()
-														) @! ()
-														
 
 // room updating
 
