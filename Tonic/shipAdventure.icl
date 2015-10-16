@@ -126,14 +126,12 @@ handleAlarm _  = return ()
 
 addTaskWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task Bool) -> Task ()
 addTaskWhileWalking actor title priority task 
-	=	(((actor.userName,title)  @: 	moveAround mkRoom actor (Just task) myMap) 
-		 >>|							viewInformation ("Task " <+++ title <+++ " terminated normally") [] () 
-		 >>|							return ()
-		)
-		-||-	
-		(								viewInformation ("Kill task " <+++ title <+++ "...") [] ()
-		 >>|							return ()
-		 )
+	=					((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
+						-||-
+						(viewInformation ("Kill task " <+++ title <+++ "...") [] () @! False)
+	>>= \b ->	if b	(viewInformation ("Task " <+++ title <+++ " terminated normally") [] ())
+	 					(viewInformation ("Task " <+++ title <+++ " has been cancelled by you") [] ())
+	>>|			return ()
 
 handleFireTask :: Instruction MyActor MyRoom MyMap -> Task Bool
 handleFireTask (FightFireInRoom nr) curActor curRoom curMap
@@ -194,13 +192,13 @@ viewObject (actorLoc,actor) (alarmLoc,FireDetector _)
 viewObject (actorLoc,actor) (alarmLoc,SmokeDetector _) 
 	= whileUnchanged myMap 
 			\curMap ->		viewInformation ("Distances Between " <+++ actor.userName <+++ " and Currently Available Resources") [] 
-								[ "Distance From " <+++ SmokeDetector <+++ " : " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
+								[ "Distance " <+++ SmokeDetector <+++ " : " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
 								] @! ()
 viewObject (actorLoc,actor) (alarmLoc,FloodDetector _)  
 	= whileUnchanged myMap 
 			\curMap -> 	let	(nrPlugs,(distPlugs,_)) 		= statResource Plug actorLoc curMap
 						in	viewInformation ("Distances Between " <+++ actor.userName <+++ " and Currently Available Resources") [] 
-								[ "The Flood Detetcted in Room: " <+++ alarmLoc <+++ " is " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
+								[ "The Flood Detected in Room: " <+++ alarmLoc <+++ " is " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
 								, "Closest Plug: " <+++ distPlugs <+++ " Rooms Away."
 								, "Available Plugs: "  <+++ nrPlugs 
 								] @! ()
@@ -210,7 +208,8 @@ statResource kind actorLoc curMap
 	= (numberResources, if (numberResources == 0) (-1,[]) (hd spath))
 	where
 		numberResources = length spath 
-		spath = sortBy (\(i,p1) (j,p2) -> i < j)  [let path = shipShortestPath actorLoc objectLoc curMap in (length path, path) \\ (objectLoc,kind) <- findAllObjects curMap]
+		spath = sortBy (\(i,p1) (j,p2) -> i < j)   [let path = shipShortestPath actorLoc objectLoc curMap in (length path, path) 
+													\\ (objectLoc,found) <- findAllObjects curMap | found == kind ]
 
 
 // general map viewing

@@ -119,7 +119,7 @@ moveOneStep roomViz actor mbtask smap
 			)
 where
     exitActions room nactor
-      = [ OnAction (Action ("Take Exit " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
+      = [ OnAction (Action ("Go " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
         \\ (exit, _) <- room.exits
         ]
     inventoryActions room nactor
