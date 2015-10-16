@@ -9,6 +9,7 @@ import Graphics.Scalable
 import qualified Data.List as DL
 from Data.Func import mapSt
 import StdArray
+import Data.Data
 
 import adventure
 
@@ -196,11 +197,6 @@ showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage Fal
 
 // setting and resetting of the detection systems
 
-detectorEq (FireDetector _) (FireDetector _)   = True
-detectorEq (SmokeDetector _) (SmokeDetector _) = True
-detectorEq (FloodDetector _) (FloodDetector _) = True
-detectorEq _ _ = False
-
 setRoomDetectors :: Task ()
 setRoomDetectors 
 	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
@@ -210,7 +206,7 @@ setRoomDetectors
                    )]
     where
     updDetector :: !Detector !RoomStatus -> RoomStatus
-    updDetector d r = [if (detectorEq d d`) (toggleDetector d`) d` \\ d` <- r]
+    updDetector d r = [if (d =+?= d`) (toggleDetector d`) d` \\ d` <- r]
 
 toggleDetector :: !Detector -> Detector
 toggleDetector (FireDetector  b) = FireDetector (not b)
