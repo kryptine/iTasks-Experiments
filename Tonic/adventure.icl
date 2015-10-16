@@ -151,19 +151,6 @@ where
 
 // perform a task given from outside
 
-addTaskWhileWalking :: ((Room r o a) -> Task ()) User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addTaskWhileWalking roomViz fromUser forUser title priority task smap 
-	=				get smap
-	>>= \curMap ->	case findUser forUser curMap of
-							Nothing 				-> return ()	
-							Just (roomnumber,actor) -> ((forUser @: 	moveAround roomViz actor (Just task) smap) 
-														 >>|			viewInformation ("Task " <+++ title <+++ " terminated normally") [] () 
-														 >>|			return ()
-														)
-														-||-	
-														(				viewInformation ("Kill task " <+++ title <+++ "...") [] ()
-														 >>|			return ()
-														 )
 
 // room updating
 

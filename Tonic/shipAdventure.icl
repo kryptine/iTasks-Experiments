@@ -119,10 +119,21 @@ handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
  >>| 	appendTopLevelTaskPrioFor me "Wait for fire handling report" "High" True 
- 			(addTaskWhileWalking mkRoom me actor.userName ("Fight Fire in Room " <+++ alarmLoc) (toSingleLineText priority) 
- 			 (handleFireTask instruction) myMap) @! ()
+ 			(addTaskWhileWalking actor ("Fight Fire in Room " <+++ alarmLoc) (toSingleLineText priority) 
+ 			 (handleFireTask instruction) ) @! ()
 
 handleAlarm _  = return ()
+
+addTaskWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task Bool) -> Task ()
+addTaskWhileWalking actor title priority task 
+	=	(((actor.userName,title)  @: 	moveAround mkRoom actor (Just task) myMap) 
+		 >>|							viewInformation ("Task " <+++ title <+++ " terminated normally") [] () 
+		 >>|							return ()
+		)
+		-||-	
+		(								viewInformation ("Kill task " <+++ title <+++ "...") [] ()
+		 >>|							return ()
+		 )
 
 handleFireTask :: Instruction MyActor MyRoom MyMap -> Task Bool
 handleFireTask (FightFireInRoom nr) curActor curRoom curMap
