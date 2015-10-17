@@ -82,11 +82,12 @@ unlockExit 	:: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask
 
 shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
 
-// automove, fetch and drop
+// auto movement from actors thru the map, fetching. dropping and using objects
 
-autoMove 	   :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
-pickupObject   :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
-dropDownObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+autoMove 	   	:: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+pickupObject   	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+useObject 	   	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+dropDownObject 	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 
 
 

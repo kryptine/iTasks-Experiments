@@ -81,7 +81,7 @@ Start world
 myTasks :: [Workflow]
 myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
 			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions			
-			,   workflow "automove" "automove" (autoHandlingFire 12)
+			,   workflow "automove" "automove" autoHandling
 		 	]
 
 // initial task to place an actor on the map
@@ -150,16 +150,28 @@ handleFireTask (FightFireInRoom nr) curActor curRoom curMap
 			>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == nr) (return (Just "Fire Extinguised")))
 				,OnAction (Action "Need More Help" []) (always (return (Just "I need more help...")))
 				]
-	
-autoHandlingFire :: RoomNumber -> Task Bool
-autoHandlingFire alarmLoc 
+// simulate via auto stuf
+
+autoHandling :: Task ()
+autoHandling
+	=							get currentUser
+	>>= \me ->  				showAlarms 
+	>>= \alarms -> 				enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms
+	>>= \(alarmLoc,detector) -> enterChoice "Choose object" [] [FireExtinguisher,Blanket]
+	>>*							[OnAction ActionOk (hasValue (\object -> autoHandlingFire alarmLoc object))]
+	>>|							autoHandling
+											
+autoHandlingFire :: RoomNumber Object -> Task Bool
+autoHandlingFire alarmLoc object
 	=				get myMap
 	>>= \curMap ->	get currentUser
-	>>= \me ->		let (roomNumber,curActor) = fromJust (findUser me curMap) // you better be on the map to be fixed later
-						objectLoc     		  = fromExit ( hd ( reverse (snd ( snd (statResource Blanket roomNumber curMap)))))
-					in execute [ autoMove roomNumber objectLoc shipShortestPath
-							   , pickupObject objectLoc Blanket
+	>>= \me ->		let (myLoc,curActor) = fromJust (findUser me curMap) 						// you better be on the map, to be fixed later
+						objectLoc     	 = fromJust (findClosest myLoc object curMap)		// there better be objects,  to be fixed later
+					in execute [ autoMove myLoc objectLoc shipShortestPath
+							   , pickupObject objectLoc object
 							   , autoMove objectLoc alarmLoc shipShortestPath
+							   , useObject alarmLoc object
+							   , resetAlarm alarmLoc
 							   ] curActor 
 where
 	execute [] 			actor 
@@ -168,6 +180,13 @@ where
 		= 				fun actor myMap
 			>>= \b ->	if (not b) (return b)
 						   (execute funs actor)			
+
+resetAlarm alarmLoc actor smap
+	 = updRoomStatus alarmLoc (updDetector (FireDetector False)) smap @! True		
+
+findClosest roomNumber object curMap
+	= 	let revPath = reverse (snd (snd (statResource object roomNumber curMap)))
+		in if (isEmpty revPath) Nothing (Just (fromExit (hd revPath)))
 
 mkRoom :: MyRoom -> Task ()
 mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick @! ()
@@ -254,9 +273,9 @@ setRoomDetectors
                              Value (ToggleAlarm selRoom d) _ -> Just (updRoomStatus selRoom (updDetector d) myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
-    where
-    updDetector :: !Detector !RoomStatus -> RoomStatus
-    updDetector d r = [if (detectorEq d d`) (toggleDetector d`) d` \\ d` <- r]
+
+updDetector :: !Detector !RoomStatus -> RoomStatus
+updDetector d r = [if (detectorEq d d`) (toggleDetector d`) d` \\ d` <- r]
 
 toggleDetector :: !Detector -> Detector
 toggleDetector (FireDetector  b) = FireDetector (not b)

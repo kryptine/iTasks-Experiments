@@ -136,24 +136,26 @@ where
 
 pickupObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 pickupObject roomNumber object actor smap
-	=				updateRoom roomNumber (fetchObject object) smap
-	>>|				return {actor & carrying = [object:actor.carrying]}
-	>>= \actor ->	updateRoom roomNumber (updateActor actor) smap
-	>>|				return True
+	=		updateRoom roomNumber (fetchObject object) smap
+	>>|		updateRoom roomNumber (updateActor {actor & carrying = [object:actor.carrying]}) smap
+	>>|		return True
 
 dropDownObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 dropDownObject roomNumber object actor smap
-	=				updateRoom roomNumber (dropObject object) smap
-	>>|				return {actor & carrying = removeMember object actor.carrying}
-	>>= \actor ->	updateRoom roomNumber (updateActor actor) smap
-	>>|				return True
+	=		updateRoom roomNumber (dropObject object) smap
+	>>|		updateRoom roomNumber (updateActor {actor & carrying = removeMember object actor.carrying}) smap
+	>>|		return True
 
 move ::  RoomNumber RoomNumber (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 move fromRoom toRoom actor smap
-	= 				updateRoom fromRoom (leaving actor) smap
-	>>| 			updateRoom toRoom (entering actor) smap
-	>>|				return True
+	= 		updateRoom fromRoom (leaving actor) smap
+	>>| 	updateRoom toRoom (entering actor) smap
+	>>|		return True
 
+useObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+useObject roomNumber object actor smap
+	=		updateRoom roomNumber (updateActor {actor & carrying = removeMember object actor.carrying}) smap
+	>>|		return True
 
 // auto moves around the maze
 
