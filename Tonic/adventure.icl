@@ -169,9 +169,8 @@ autoMove thisRoom target pathFun actor smap
 				 		path	= pathFun thisRoom target curMap
 					in	if (isEmpty path) (return False)
 						(		let nextRoom = fromExit (hd path)
-								in			waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
-					 						//viewInformation ("next room is " <+++ nextRoom <+++ " targetting " <+++ target) [] ()	
-					 				>>|		move room.number nextRoom nactor smap
+								in			move room.number nextRoom nactor smap
+					 				>>|		waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
 					 				>>|		autoMove nextRoom target pathFun actor smap
 						)
 		
