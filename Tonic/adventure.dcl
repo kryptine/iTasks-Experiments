@@ -32,6 +32,8 @@ from Data.IntMap.Strict import :: IntMap
 
 instance == (Actor o a)  
 
+fromExit :: Exit -> Int
+
 derive class iTask Room, Exit, Actor
 
 // place an new actor into a room of your shared map after which the actor can freely move around
@@ -52,8 +54,9 @@ moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) 
 
 // finds all actors currently walking on the map, find all objects in the map
 
-findAllActors  :: (MAP r o a) -> [(RoomNumber,(Actor o a))] 
-findAllObjects :: (MAP r o a) -> [(RoomNumber,o)]
+findAllActors  	:: (MAP r o a) -> [(RoomNumber,(Actor o a))] 
+findAllObjects 	:: (MAP r o a) -> [(RoomNumber,o)]
+findUser 		:: User (MAP r o a) ->  Maybe (RoomNumber,(Actor o a))
 
 // update the status of an actor, unique username is used as identification
 
@@ -78,6 +81,13 @@ unlockExit 	:: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask
 // shortest path calculation
 
 shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
+
+// automove, fetch and drop
+
+autoMove 	   :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+pickupObject   :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+dropDownObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+
 
 
 

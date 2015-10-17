@@ -81,6 +81,7 @@ Start world
 myTasks :: [Workflow]
 myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
 			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions			
+			,   workflow "automove" "automove" (autoHandlingFire 12)
 		 	]
 
 // initial task to place an actor on the map
@@ -150,6 +151,23 @@ handleFireTask (FightFireInRoom nr) curActor curRoom curMap
 				,OnAction (Action "Need More Help" []) (always (return (Just "I need more help...")))
 				]
 	
+autoHandlingFire :: RoomNumber -> Task Bool
+autoHandlingFire alarmLoc 
+	=				get myMap
+	>>= \curMap ->	get currentUser
+	>>= \me ->		let (roomNumber,curActor) = fromJust (findUser me curMap) // you better be on the map to be fixed later
+						objectLoc     		  = fromExit ( hd ( reverse (snd ( snd (statResource Blanket roomNumber curMap)))))
+					in execute [ autoMove roomNumber objectLoc shipShortestPath
+							   , pickupObject objectLoc Blanket
+							   , autoMove objectLoc alarmLoc shipShortestPath
+							   ] curActor 
+where
+	execute [] 			actor 
+		= return True
+	execute [fun:funs]	actor 
+		= 				fun actor myMap
+			>>= \b ->	if (not b) (return b)
+						   (execute funs actor)			
 
 mkRoom :: MyRoom -> Task ()
 mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick @! ()
@@ -317,6 +335,7 @@ isHigh (FloodDetector b) = b
 
 // shortest path given the alarms set on the ship
 
+shipShortestPath :: RoomNumber RoomNumber MyMap -> [Exit]
 shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
   where
   cost detectors = 1 + sum (map detectorCost detectors)
