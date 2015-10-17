@@ -38,16 +38,17 @@ derive class iTask Room, Exit, Actor
 
 addActorToMap :: ((Room r o a) -> Task ()) (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
-// a new actor tasks with indicated priority can be assigned to a user walking as actor on the map
+// move around the map until you return something
 
-moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 
-//addTaskWhileWalking :: ((Room r o a) -> Task ()) User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+//moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+
 
 // the actor task will constantly be informed about the latest state of the actor, room, and map
 // return True to stop the task
 
-:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
+:: ActorTask r o a b :== (Actor o a) (Room r o a) (MAP r o a) -> Task (Maybe b)
 
 // finds all actors currently walking on the map, find all objects in the map
 

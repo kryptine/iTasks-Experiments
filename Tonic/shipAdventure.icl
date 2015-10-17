@@ -118,22 +118,23 @@ handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 # instruction = FightFireInRoom alarmLoc 
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
- >>| 	appendTopLevelTaskPrioFor me "Wait for fire handling report" "High" True 
- 			(addTaskWhileWalking actor ("Fight Fire in Room " <+++ alarmLoc) (toSingleLineText priority) 
+ >>| 	appendTopLevelTaskPrioFor me ("Report on Fire in " <+++ alarmLoc) "High" True 
+ 			(addTaskWhileWalking actor ("Fight Fire in " <+++ alarmLoc) (toSingleLineText priority) 
  			 (handleFireTask instruction) ) @! ()
 
 handleAlarm _  = return ()
 
-addTaskWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task Bool) -> Task ()
+addTaskWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe a)) -> Task () | iTask a
 addTaskWhileWalking actor title priority task 
-	=					((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
+	=					(((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
 						-||-
-						(viewInformation ("Kill task " <+++ title <+++ "...") [] () @! False)
-	>>= \b ->	if b	(viewInformation ("Task " <+++ title <+++ " terminated normally") [] ())
+						(viewInformation ("Cancel task \"" <+++ title <+++ "\"") [] () @! Nothing))
+	>>= \mba ->	if (isNothing mba)
 	 					(viewInformation ("Task " <+++ title <+++ " has been cancelled by you") [] ())
+						(viewInformation ("Task " <+++ title <+++ " terminated normally, returning:") [] (fromJust mba) @! ())
 	>>|			return ()
 
-handleFireTask :: Instruction MyActor MyRoom MyMap -> Task Bool
+handleFireTask :: Instruction MyActor MyRoom MyMap -> Task (Maybe String)
 handleFireTask (FightFireInRoom nr) curActor curRoom curMap
 	=		(viewInformation ("Fight Fire in Room: " <+++ nr) []  ()
 			-||- 
@@ -145,8 +146,8 @@ handleFireTask (FightFireInRoom nr) curActor curRoom curMap
 			let (_,distBlanket) = statResource Blanket curRoom.number curMap in
 				viewInformation ("Shortest Path to a Blanket: " <+++ distBlanket) [] ()
 			)
-			>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == nr) (return True))
-				,OnAction (Action "Need More Help" []) (always (return False))
+			>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == nr) (return (Just "Fire Extinguised")))
+				,OnAction (Action "Need More Help" []) (always (return (Just "I need more help...")))
 				]
 	
 
@@ -182,9 +183,9 @@ viewObject (actorLoc,actor) (alarmLoc,FireDetector _)
 			\curMap -> 	let		(nrExt,(distExt,_)) 			= statResource FireExtinguisher actorLoc curMap
 								(nrBlankets,(distBlankets,_)) 	= statResource Blanket 			actorLoc curMap
 						in	viewInformation ("Distances Between " <+++ actor.userName <+++ " and Currently Available Resources") [] 
-								[ "The Fire Detected in Room: " <+++ alarmLoc <+++ " is " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
-								, "Closest Extinquisher is " <+++ distExt <+++ " Rooms Away."
-								, "Closest Blanket is " <+++ distBlankets <+++ " Rooms Away."
+								[ "The Fire Detected in room " <+++ alarmLoc <+++ ": " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
+								, "Closest Extinquisher: " <+++ distExt <+++ " Rooms Away."
+								, "Closest Blanket: " <+++ distBlankets <+++ " Rooms Away."
 								, "Available Extinquishers: "  <+++ nrExt 
 								, "Available Blankets: "  <+++ nrBlankets 
 								] @! ()
