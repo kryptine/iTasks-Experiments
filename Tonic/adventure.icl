@@ -176,7 +176,7 @@ autoMove thisRoom target pathFun actor smap
 					 				>>|		autoMove nextRoom target pathFun actor smap
 						)
 		
-delay = 5
+delay = 2
 
 // room updating
 

@@ -111,7 +111,7 @@ giveInstructions
 				 			>&>						withSelection (viewInformation () [] "")
 							\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
 							>>* 					[ OnAction ActionByHand  	 (hasValue (\prio -> handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),prio)))
-	       											, OnAction ActionSimulated  (hasValue (\prio -> autoHandleAlarm actor.userName (alarmLoc,detector) Blanket @! ()))
+	       											, OnAction ActionSimulated  (hasValue (\prio -> autoHandleAlarm actor.userName (alarmLoc,detector) @! ()))
 													, OnAction ActionCancel (always (return ()))
 	       											]
 	       				)
@@ -205,41 +205,41 @@ where
 
 // simulate via auto stuf
 
-autoHandleAlarm user (alarmLoc,detector) object
+autoHandleAlarm user (alarmLoc,detector) 
 	=	appendTopLevelTaskPrioFor user ("Auto handling " <+++ toString detector <+++ " in room " <+++ alarmLoc) "High" True 
- 			(autoHandlingFire user (alarmLoc,detector) object) @! ()
+ 			(startSimulation user (alarmLoc,detector)) @! ()
 
-autoHandlingFire :: User (RoomNumber,Detector) Object -> Task Bool
-autoHandlingFire user (alarmLoc,detector) object
+startSimulation :: User (RoomNumber,Detector) -> Task Bool
+startSimulation user (alarmLoc,detector) 
 	=				updActorStatus user (\st -> {st & occupied = Busy}) myMap
  	>>|				addLog "Commander" user ("Auto Fighting " <+++ toString detector <+++ " in " <+++ alarmLoc)
  	>>|				get myMap
-	>>= \curMap ->	let (myLoc,curActor) 		= fromJust (findUser user curMap) 										// you better be on the map, to be fixed later
+	>>= \curMap ->	let (myLoc,curActor) 		= fromJust (findUser user curMap) 						
 						(mbObjectLoc,mbObject)  = findClosestObject myLoc (alarmLoc,detector) curMap		
 					in if (isNothing mbObjectLoc)
 						  (return False)
-						  if (isNothing mbObject)													// in case of smoke alarm no object needed
-						  	(execute 	[ autoMove myLoc alarmLoc shipShortestPath
-									   	, resetAlarm (alarmLoc,detector)
-						  			 	]
-						  	curActor)
-						  	(execute   	[ autoMove myLoc (fromJust mbObjectLoc) shipShortestPath
-									   	, pickupObject (fromJust mbObjectLoc) object
-									   	, autoMove (fromJust mbObjectLoc) alarmLoc shipShortestPath
-									   	, useObject alarmLoc object
-									   	, resetAlarm (alarmLoc,detector)
-									   	] curActor) 
+						  if (isNothing mbObject)													
+						  	(simulateHandling myLoc alarmLoc detector curActor myMap)
+						  	(simulateHandlingWithObject myLoc (fromJust mbObject) (fromJust mbObjectLoc) alarmLoc detector curActor myMap) 
 	>>= \succes ->	updActorStatus user (\st -> {st & occupied = Available}) myMap
  	>>|				addLog "Commander" user ("Auto Task " <+++ toString detector <+++ " in " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
  	>>|				return True
-where
-	execute [] 			actor 
-		= return True
-	execute [fun:funs]	actor 
-		= 				fun actor myMap
-			>>= \b ->	if (not b) (return b)
-						   (execute funs actor)			
 
+simulateHandling startLoc alarmLoc detector actor smap
+	=						autoMove startLoc alarmLoc shipShortestPath actor smap
+   	>>= \targetReached ->	if targetReached (resetAlarm (alarmLoc,detector) actor smap)
+   							(return False)
+
+simulateHandlingWithObject startLoc object objectLoc alarmLoc detector actor smap
+	=						autoMove startLoc objectLoc shipShortestPath actor smap
+   	>>= \objectReached	->	if objectReached	(pickupObject objectLoc object actor smap
+   	>>= \objectFound	->	if objectFound		(autoMove objectLoc alarmLoc shipShortestPath actor smap
+   	>>= \targetReached ->	if targetReached	(useObject alarmLoc object actor smap
+   	>>= \used ->			if used		 		(resetAlarm (alarmLoc,detector) actor smap)
+												(return False))
+												(return False))
+												(return False))
+												(return False)
 resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task Bool
 resetAlarm (alarmLoc,detector) _ smap
 	 = updRoomStatus alarmLoc (updDetector resetDetector detector) smap @! True		
