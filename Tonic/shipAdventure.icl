@@ -18,7 +18,10 @@ import adventure
 :: MyFloor		:== Floor 	RoomStatus Object ActorStatus
 :: MyRoom		:== Room 	RoomStatus Object ActorStatus
 
-:: MapClick     = NoMapClick | SelectRoom RoomNumber | ToggleAlarm RoomNumber Detector
+:: MapClick     = NoMapClick
+                | SelectRoom RoomNumber
+                | ToggleAlarm RoomNumber Detector
+                | ToggleDoor RoomNumber Exit
 
 :: RoomStatus 	:==	[Detector] 
 :: Detector		= 	FireDetector Bool 
@@ -281,8 +284,11 @@ setRoomDetectors
 	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
       >>* [OnValue (\tv -> case tv of
                              Value (ToggleAlarm selRoom d) _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myMap >>| setRoomDetectors)
+                             Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
+import StdDebug
+
 updDetector :: !(Detector -> Detector) !Detector !RoomStatus -> RoomStatus
 updDetector f d r = [if (d =+?= d`) (f d`) d` \\ d` <- r]
 
@@ -466,24 +472,30 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
     #! exitAligns  = repeatn num align
     #! incr        = bgWidth / toReal (num + 1)
     #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px (n * incr - (exitWidth / 2.0)), px 0.0) : xs], n + 1.0)) ([], 1.0) es)
-    #! exitImgs    = map (mkDoor o snd) es
+    #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
-    mkDoor :: !Locked -> Image (!MyMap, !MapClick)
-    mkDoor locked = xline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
-                                                 <@< { strokewidth = px 3.0 }
+    mkDoor :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
+    mkDoor (exit, locked)
+      = rect (px exitWidth) (px 4.0) <@< { stroke = toSVGColor "black" }
+                                     <@< { strokewidth = px 1.0 }
+                                     <@< { fill = toSVGColor (if locked "black" "white") }
+                                     <@< { onclick = onClick (ToggleDoor number exit), local = False }
 
   mkAsOsIs2 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
   mkAsOsIs2 bgHeight num align es
     #! exitAligns  = repeatn num align
     #! incr        = bgHeight / toReal (num + 1)
     #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px 0.0, px (n * incr - (exitWidth / 2.0))) : xs], n + 1.0)) ([], 1.0) es)
-    #! exitImgs    = map (mkDoor o snd) es
+    #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
-    mkDoor :: !Locked -> Image (!MyMap, !MapClick)
-    mkDoor locked = yline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
-                                                 <@< { strokewidth = px 3.0 }
+    mkDoor :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
+    mkDoor (exit, locked)
+      = rect (px 4.0) (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
+                                     <@< { strokewidth = px 3.0 }
+                                     <@< { fill = toSVGColor (if locked "black" "white") }
+                                     <@< { onclick = onClick (ToggleDoor number exit), local = False }
 
 onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
 onClick clck _ (m, _) = (m, clck)
