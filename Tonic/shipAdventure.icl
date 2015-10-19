@@ -420,7 +420,7 @@ floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 64.0
-exitWidth =: 12.0
+exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
@@ -450,10 +450,10 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
   #! upDownExits    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o (mkUpDown number)) (upEs ++ downEs)) Nothing
-  #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs1 bgWidth numNorth (AtLeft, AtTop) northEs
-  #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs1 bgWidth numSouth (AtLeft, AtBottom) southEs
-  #! (rExitAligns, rExitOffsets, rExitImgs) = mkAsOsIs2 bgHeight numEast (AtRight, AtTop) eastEs
-  #! (lExitAligns, lExitOffsets, lExitImgs) = mkAsOsIs2 bgHeight numWest (AtLeft, AtTop) westEs
+  #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs (\sp -> (sp, px 0.0)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numNorth (AtLeft, AtTop)    northEs
+  #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs (\sp -> (sp, px 0.0)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numSouth (AtLeft, AtBottom) southEs
+  #! (rExitAligns,   rExitOffsets,   rExitImgs)   = mkAsOsIs (\sp -> (px 0.0, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numEast  (AtRight, AtTop)   eastEs
+  #! (lExitAligns,   lExitOffsets,   lExitImgs)   = mkAsOsIs (\sp -> (px 0.0, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numWest  (AtLeft, AtTop)    westEs
   #! total          = overlay ([(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)] ++ topExitAligns ++ botExitAligns ++ rExitAligns ++ lExitAligns)
                               ([(px 3.0, px 3.0), (px -3.0, px 3.0), (zero, zero), (px 3.0, px -3.0), (px -3.0, px -3.0)] ++ topExitOffsets ++ botExitOffsets ++ rExitOffsets ++ lExitOffsets)
                               ([statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
@@ -467,44 +467,34 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
   foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
   foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
-  mkAsOsIs1 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
-  mkAsOsIs1 bgWidth num align es
+  mkAsOsIs :: !(Span -> (!Span, !Span)) !(Image (!MyMap, !MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
+  mkAsOsIs mkTuple doorImg bgSize num align es
     #! exitAligns  = repeatn num align
-    #! incr        = bgWidth / toReal (num + 1)
-    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px (n * incr - (exitWidth / 2.0)), px 0.0) : xs], n + 1.0)) ([], 1.0) es)
+    #! incr        = bgSize / toReal (num + 1)
+    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([mkTuple (px (n * incr - (exitWidth / 2.0))) : xs], n + 1.0)) ([], 1.0) es)
     #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
     mkDoor :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
     mkDoor (exit, locked)
-      = rect (px exitWidth) (px 4.0) <@< { stroke = toSVGColor "black" }
-                                     <@< { strokewidth = px 1.0 }
-                                     <@< { fill = toSVGColor (if locked "black" "white") }
-                                     <@< { onclick = onClick (ToggleDoor number exit), local = False }
-
-  mkAsOsIs2 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
-  mkAsOsIs2 bgHeight num align es
-    #! exitAligns  = repeatn num align
-    #! incr        = bgHeight / toReal (num + 1)
-    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px 0.0, px (n * incr - (exitWidth / 2.0))) : xs], n + 1.0)) ([], 1.0) es)
-    #! exitImgs    = map mkDoor es
-    = (exitAligns, exitOffsets, exitImgs)
-    where
-    mkDoor :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
-    mkDoor (exit, locked)
-      = rect (px 4.0) (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
-                                     <@< { strokewidth = px 3.0 }
-                                     <@< { fill = toSVGColor (if locked "black" "white") }
-                                     <@< { onclick = onClick (ToggleDoor number exit), local = False }
+      = doorImg
+          <@< { stroke = toSVGColor "black" }
+          <@< { strokewidth = px 1.0 }
+          <@< { fill = toSVGColor (if locked "black" "white") }
+          <@< { onclick = onClick (ToggleDoor number exit), local = False }
 
 onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
 onClick clck _ (m, _) = (m, clck)
 
 mkUpDown :: !RoomNumber !(!Exit, Locked) -> Image (!MyMap, !MapClick)
-mkUpDown n (e=:(Up _), l)   = polygon Nothing [(px 0.0, px 0.0), (px 8.0, px -8.0), (px 8.0, px 0.0)] <@< { opacity = if l 0.3 1.0 }
-                                                                                                      <@< { onclick = onClick (ToggleDoor n e), local = False }
-mkUpDown n (e=:(Down _), l) = polygon Nothing [(px 0.0, px -8.0), (px 8.0, px 0.0), (px 0.0, px 0.0)] <@< { opacity = if l 0.3 1.0 }
-                                                                                                      <@< { onclick = onClick (ToggleDoor n e), local = False }
+mkUpDown n (e=:(Up _), l)
+  = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
+      <@< { opacity = if l 0.3 1.0 }
+      <@< { onclick = onClick (ToggleDoor n e), local = False }
+mkUpDown n (e=:(Down _), l)
+  = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
+      <@< { opacity = if l 0.3 1.0 }
+      <@< { onclick = onClick (ToggleDoor n e), local = False }
 
 mkStatusBadge :: Int !Bool !Real !Detector ![Image (!MyMap, !MapClick)] -> [Image (!MyMap, !MapClick)]
 mkStatusBadge roomNo mngmnt badgeMult d acc
