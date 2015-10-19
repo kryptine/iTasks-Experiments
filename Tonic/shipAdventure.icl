@@ -528,9 +528,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! userStr     = toString userName
   #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
   #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
-  #! inventory   = if (length carrying > 0)
-                     [mkInventoryBadge (toString (length carrying))]
-                     []
+  #! inventory   = map (\i -> mkInventoryBadge (toString i % (0,0))) carrying
   = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
 mkActorBadgeBackground :: !Availability -> Image a
