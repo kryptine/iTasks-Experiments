@@ -6,6 +6,9 @@ import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
 from Data.IntMap.Strict import :: IntMap
 
+:: SMap q r o a :== RWShared q (MAP r o a)  (MAP r o a)
+
+
 :: MAP r o a	:== [Floor r o a]
 :: Floor r o a	:==	[[Room r o a]]
 :: Room roomStatus object actorStatus
