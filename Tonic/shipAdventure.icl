@@ -50,6 +50,8 @@ instance toString Object where
   toString Blanket          = "Blanket"
   toString Plug             = "Plug"
 
+instance toString Exit where toString exit = toSingleLineText exit
+
 instance toString Detector
 where toString (FireDetector _)  = "Fire Alarm"
 	  toString (SmokeDetector _) = "Smoke Alarm"
@@ -110,7 +112,7 @@ giveInstructions
 				 			\(actorLoc,actor) ->	viewRelativeStatus (actorLoc,actor) (alarmLoc,detector)
 				 			>&>						withSelection (viewInformation () [] "")
 							\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
-							>>* 					[ OnAction ActionByHand  	 (hasValue (\prio -> handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),prio)))
+							>>* 					[ OnAction ActionByHand  	(hasValue (\prio -> handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),prio)))
 	       											, OnAction ActionSimulated  (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc,detector) @! ()))
 													, OnAction ActionCancel (always (return ()))
 	       											]
@@ -129,33 +131,32 @@ where
 		=	whileUnchanged myMap 
 				(\curMap ->  let allActors = findAllActors curMap in
 								enterChoice (if (isEmpty allActors) "No one available at all !: : " "Who should handle: " <+++ showAlarm (number,detector)) [] allActors)
-	
 
-viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
-viewRelativeStatus (actorLoc,actor) (alarmLoc,FireDetector _)
-	= whileUnchanged myMap 
-			\curMap -> 	let		(nrExt,(extLoc,distExt,_)) 					= pathToClosestObject FireExtinguisher actorLoc curMap
-								(nrBlankets,(blanketLoc,distBlankets,_)) 	= pathToClosestObject Blanket 			actorLoc curMap
-						in	viewInformation "" [] 
-								(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-										 [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
-										 , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
-										 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
-										 ]) @! ()
-viewRelativeStatus (actorLoc,actor) (alarmLoc,SmokeDetector _) 
-	= whileUnchanged myMap 
-			\curMap ->	viewInformation "" [] 
-								(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-										 [ ("The Smoke Detected in Room " <+++ alarmLoc, length (shipShortestPath actorLoc alarmLoc curMap))
-										 ]) @! ()
-viewRelativeStatus (actorLoc,actor) (alarmLoc,FloodDetector _)  
-	= whileUnchanged myMap 
-			\curMap -> 	let	(nrPlugs,(plugLoc,distPlugs,_)) 		= pathToClosestObject Plug actorLoc curMap
-						in	viewInformation "" [] 
-								(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-										 [ ("The Flood Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
-										 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
-										 ]) @! ()
+	viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
+	viewRelativeStatus (actorLoc,actor) (alarmLoc,FireDetector _)
+		= whileUnchanged myMap 
+				\curMap -> 	let		(nrExt,(extLoc,distExt,_)) 					= pathToClosestObject FireExtinguisher actorLoc curMap
+									(nrBlankets,(blanketLoc,distBlankets,_)) 	= pathToClosestObject Blanket 			actorLoc curMap
+							in	viewInformation "" [] 
+									(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+											 [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+											 , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
+											 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
+											 ]) @! ()
+	viewRelativeStatus (actorLoc,actor) (alarmLoc,SmokeDetector _) 
+		= whileUnchanged myMap 
+				\curMap ->	viewInformation "" [] 
+									(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+											 [ ("The Smoke Detected in Room " <+++ alarmLoc, length (shipShortestPath actorLoc alarmLoc curMap))
+											 ]) @! ()
+	viewRelativeStatus (actorLoc,actor) (alarmLoc,FloodDetector _)  
+		= whileUnchanged myMap 
+				\curMap -> 	let	(nrPlugs,(plugLoc,distPlugs,_)) 		= pathToClosestObject Plug actorLoc curMap
+							in	viewInformation "" [] 
+									(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+											 [ ("The Flood Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+											 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
+											 ]) @! ()
 
 mkTable :: [String]  ![a] -> Table | gText{|*|} a
 mkTable	headers a = Table headers (map row a) Nothing
@@ -164,13 +165,14 @@ where
 
 
 handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
-# message = ("Handle " <+++ toString detector <+++ " in Room " <+++ alarmLoc)
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
- >>|	addLog ("Commander " <+++ me) actor.userName message
- >>| 	appendTopLevelTaskPrioFor me message "High" True 
- 			(handleWhileWalking actor message (toSingleLineText priority) 
+ >>|	addLog ("Commander " <+++ me) actor.userName (message "Start Handling ")
+ >>| 	appendTopLevelTaskPrioFor me (message "Wait for ") "High" True 
+ 			(handleWhileWalking actor (message "Handle ") (toSingleLineText priority) 
  			 (taskToDo (alarmLoc,detector)) ) @! ()
 where
+	message work = (work <+++ toString detector <+++ " in Room " <+++ alarmLoc)
+
 	handleWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe a)) -> Task () | iTask a
 	handleWhileWalking actor title priority task 
 		=					(((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
@@ -185,20 +187,62 @@ where
 	taskToDo (alarmLoc,detector) curActor curRoom curMap
 		=		viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
 				-|| 
-				(let	(nrExt,(_,distExt,_)) 			= pathToClosestObject FireExtinguisher actorLoc curMap
-						(nrBlankets,(_,distBlankets,_)) = pathToClosestObject Blanket actorLoc curMap
-						(nrPlugs,(_,distPlugs,_)) 		= pathToClosestObject Plug actorLoc curMap
+				(let	path												= shipShortestPath curRoom.number alarmLoc curMap
+						alarmDist											= length path			 
+						(nrExt,(extLoc,distExt,dirExt)) 					= pathToClosestObject FireExtinguisher curRoom.number curMap
+						(nrBlankets,(blanketLoc,distBlankets,dirBlanket)) 	= pathToClosestObject Blanket curRoom.number curMap
+						(nrPlugs,(plugLoc,distPlugs,dirPlug)) 				= pathToClosestObject Plug curRoom.number curMap
 				in viewInformation "" []
-						(mkTable  [ "Object Description", "Rooms Away from " <+++ curActor.userName <+++ " in Room " <+++ curRoom]
-								 [ ("The " <+++ toString detector <+++ " Detected in room " <+++ alarmLoc, length (shipShortestPath actorLoc alarmLoc curMap))
-								 , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", distExt)
-								 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", distBlankets)
-								 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", distPlugs)
+						(mkTable  [ "Object Description", "Rooms Away from " <+++ curActor.userName]
+								 [ (toString detector <+++ " Detected", toString alarmDist <+++ " (in Room " <+++ alarmLoc <+++ goto path <+++ ")")
+								 , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ goto dirExt <+++ "}")
+								 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ goto dirBlanket <+++ ")")
+								 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ goto dirPlug <+++ ")")
 								 ])) @! ()
 				>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == alarmLoc) (return (Just "Fire Extinguised")))
-					,OnAction (Action "Need More Help" []) (always succesful)
+
+					,OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) useExtinquisher)
+					,OnAction (Action "Use Blanket" []) 			(ifCond (mayUseBlanket detector) useBlanket)
+					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) usePlug)
+					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) smokeReport)
+
+ 					,OnAction (Action "Need More Help" []) (always succesful)
 					]
-	where
+	where 
+		mayUseExtinguisher (FireDetector True) 	= curRoom.number == alarmLoc && (isMember FireExtinguisher curActor.carrying)
+		mayUseExtinguisher _ 					= False
+
+		mayUseBlanket (FireDetector True) 		= curRoom.number == alarmLoc && (isMember Blanket curActor.carrying)
+		mayUseBlanket _ 						= False
+
+		mayUsePlug  (FloodDetector True) 		= curRoom.number == alarmLoc && (isMember Plug curActor.carrying)
+		mayUsePlug _							= False
+
+		mayDetectedSmoke (SmokeDetector True) 	= curRoom.number == alarmLoc
+		mayDetectedSmoke _						= False
+
+		useExtinquisher		=		useObject alarmLoc FireExtinguisher curActor myMap
+   								>>|	resetAlarm (alarmLoc,detector) actor myMap
+   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| return (Just "Fire Extinguised")
+
+		useBlanket			=		useObject alarmLoc Blanket curActor myMap
+   								>>|	resetAlarm (alarmLoc,detector) actor myMap
+   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| return (Just "Fire Extinguised")
+		
+		usePlug				=		useObject alarmLoc Plug curActor myMap
+   								>>|	resetAlarm (alarmLoc,detector) actor myMap
+   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| return (Just "Flooding Stopped")
+
+		smokeReport			=		resetAlarm (alarmLoc,detector) actor myMap
+   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| return (Just "Don't smoke under a smoke detector !!")
+
+		goto []  = ", you are there"
+		goto dir = ", goto " +++ toString (hd dir)
+
 		succesful 
 			=		updRoomStatus alarmLoc (updDetector resetDetector detector) myMap
 			>>|		return (Just "I need more help...")
@@ -240,6 +284,7 @@ simulateHandlingWithObject startLoc object objectLoc alarmLoc detector actor sma
 												(return False))
 												(return False))
 												(return False)
+
 resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task Bool
 resetAlarm (alarmLoc,detector) actor smap
 	= 		updRoomStatus alarmLoc (updDetector resetDetector detector) smap 		
@@ -390,9 +435,9 @@ where
                                                                                                      , (Up 5, False)
                                                                                                      ], actors = []}
 	room14		= {name = "room 1.4",   number = 17, roomStatus = detectors, inventory = [], exits = [(North 16, False), (South 20, False)], actors = []}
-	room15		= {name = "room 1.5",   number = 18, roomStatus = detectors, inventory = [Blanket], exits = [(North 16, False), (South 20, False), (South 21, False)], actors = []}
-	room16		= {name = "room 1.6",   number = 19, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 16, False), (South 21, False)], actors = []}
-	room17		= {name = "room 1.7",   number = 20, roomStatus = detectors, inventory = [Blanket], exits = [(North 17, False), (North 18, False), (South 22, False)], actors = []}
+	room15		= {name = "room 1.5",   number = 18, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 16, False), (South 20, False), (South 21, False)], actors = []}
+	room16		= {name = "room 1.6",   number = 19, roomStatus = detectors, inventory = [], exits = [(North 16, False), (South 21, False)], actors = []}
+	room17		= {name = "room 1.7",   number = 20, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 17, False), (North 18, False), (South 22, False)], actors = []}
 	room18		= {name = "room 1.8",   number = 21, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 18, False), (North 19, False), (South 22, False)], actors = []}
 	front1		= {name = "back 1",     number = 22, roomStatus = detectors, inventory = [], exits = [(North 20, False), (North 21, False), (Up 11, False)], actors = []}
 	

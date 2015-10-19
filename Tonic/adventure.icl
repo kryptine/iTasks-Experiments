@@ -118,7 +118,7 @@ moveOneStep roomViz actor mbtask smap
 								     ) @! Nothing
 								)
 								-||- 
-								(if (isNothing mbtask) (viewInformation "" [] () @!  Nothing) ((fromJust mbtask) actor room map))  
+								(if (isNothing mbtask) (viewInformation "" [] () @!  Nothing) ((fromJust mbtask) nactor room map))  
 						)
 			    )
 			)
