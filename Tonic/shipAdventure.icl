@@ -408,6 +408,9 @@ mapImage mngmnt (m, _) tsrc
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
+floorWidth :: !MyFloor -> Int
+floorWidth floor = foldr (\xs -> max (length xs)) 0 floor
+
 floorImage :: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (!MyMap, MapClick), !*TagSource)
 floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
@@ -467,11 +470,11 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
   foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
   foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
-  mkAsOsIs :: !(Span -> (!Span, !Span)) !(Image (!MyMap, !MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
+  mkAsOsIs :: !(Span -> (!Span, !Span)) !(Image (!MyMap, !MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)]
+           -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
   mkAsOsIs mkTuple doorImg bgSize num align es
     #! exitAligns  = repeatn num align
-    #! incr        = bgSize / toReal (num + 1)
-    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([mkTuple (px (n * incr - (exitWidth / 2.0))) : xs], n + 1.0)) ([], 1.0) es)
+    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([mkTuple (px n) : xs], n + roomDim)) ([], (roomDim - exitWidth) / 2.0) es)
     #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
