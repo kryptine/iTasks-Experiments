@@ -19,6 +19,8 @@ derive class iTask Room, Exit, Actor
 
 instance == (Actor o a)  where (==) a1 a2 = a1.userName == a2.userName
 
+instance == Exit where (==) e1 e2 =e1 === e2
+
 :: PreviousIdx :== Int
 :: NodeIdx     :== Int
 :: Distance :== Int
@@ -174,7 +176,7 @@ autoMove thisRoom target pathFun actor smap
 					 				>>|		autoMove nextRoom target pathFun actor smap
 						)
 		
-delay = 0
+delay = 5
 
 // room updating
 
@@ -201,13 +203,26 @@ where
 
 // room status updating
 
+toggleExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+toggleExit roomNo exit smap = updExit roomNo exit smap not
+
 lockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-lockExit roomNo exit smap = updExit roomNo exit smap True
+lockExit roomNo exit smap = updExit roomNo exit smap (const True)
 
 unlockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-unlockExit roomNo exit smap = updExit roomNo exit smap False
+unlockExit roomNo exit smap = updExit roomNo exit smap (const False)
 
-updExit roomNo exit smap locked = updateRoom roomNo (\r -> {r & exits = [if (fromExit e == fromExit exit) (e, locked) el \\ el=:(e, _) <- r.exits]}) smap
+updExit roomNo exit smap lockf
+  = upd (map (map (map updRoom))) smap @! ()
+  where
+  updRoom r = {r & exits = [if (interestingExit r e) (e, lockf l) (e, l)  \\ (e, l) <- r.exits] }
+  interestingExit r e = (r.number == roomNo && e == exit) || (r.number == fromExit exit && e == inverseExit exit)
+  inverseExit (North _) = South roomNo
+  inverseExit (South _) = North roomNo
+  inverseExit (East _)  = West roomNo
+  inverseExit (West _)  = East roomNo
+  inverseExit (Up _)    = Down roomNo
+  inverseExit (Down _)  = Up roomNo
 
 getRoom :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe (Room r o a)) | iTask r & iTask o & iTask a & Eq o
 getRoom roomNumber smap = get smap >>= return o getRoomFromMap roomNumber

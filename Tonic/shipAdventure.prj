@@ -69,6 +69,20 @@ OtherModules
 			ReuseUniqueNodes:	True
 			Fusion:	False
 	Module
+		Name:	StdCleanTypes
+		Dir:	{Application}\Libraries\Dynamics
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	NoTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
 		Name:	StdDynamic
 		Dir:	{Application}\Libraries\Dynamics
 		Compiler
@@ -796,6 +810,20 @@ OtherModules
 			Fusion:	False
 	Module
 		Name:	Data.CircularStack
+		Dir:	{Application}\iTasks-SDK\Dependencies\clean-platform\src\libraries\OS-Independent
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	NoTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
+		Name:	Data.Data
 		Dir:	{Application}\iTasks-SDK\Dependencies\clean-platform\src\libraries\OS-Independent
 		Compiler
 			NeverMemoryProfile:	False

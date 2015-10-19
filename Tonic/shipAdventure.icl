@@ -9,6 +9,7 @@ import Graphics.Scalable
 import qualified Data.List as DL
 from Data.Func import mapSt
 import StdArray
+import Data.Data
 
 import adventure
 
@@ -17,7 +18,10 @@ import adventure
 :: MyFloor		:== Floor 	RoomStatus Object ActorStatus
 :: MyRoom		:== Room 	RoomStatus Object ActorStatus
 
-:: MapClick     = NoMapClick | SelectRoom RoomNumber | ToggleAlarm RoomNumber Detector
+:: MapClick     = NoMapClick
+                | SelectRoom RoomNumber
+                | ToggleAlarm RoomNumber Detector
+                | ToggleDoor RoomNumber Exit
 
 :: RoomStatus 	:==	[Detector] 
 :: Detector		= 	FireDetector Bool 
@@ -40,7 +44,6 @@ import adventure
 derive class iTask Detector, Object, ActorStatus, Availability, Priority, Log, MapClick
 
 instance == Object      where (==) o1 o2 = o1 === o2
-//	instance == Instruction where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
 instance toString Object where
   toString FireExtinguisher = "Fire extinguiser"
@@ -311,11 +314,12 @@ setRoomDetectors
 	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
       >>* [OnValue (\tv -> case tv of
                              Value (ToggleAlarm selRoom d) _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myMap >>| setRoomDetectors)
+                             Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
 
 updDetector :: !(Detector -> Detector) !Detector !RoomStatus -> RoomStatus
-updDetector f d r = [if (detectorEq d d`) (f d`) d` \\ d` <- r]
+updDetector f d r = [if (d =+?= d`) (f d`) d` \\ d` <- r]
 
 toggleDetector :: !Detector -> Detector
 toggleDetector (FireDetector  b) = FireDetector  (not b)
@@ -382,7 +386,7 @@ where
 	back1		= {name = "front 1",    number = 12, roomStatus = detectors, inventory = [], exits = [(South 13, False), (South 14, False), (South 15, False), (Up 1, False)], actors = []}
 	room11		= {name = "room 1.1",   number = 13, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False)], actors = []}
 	room12		= {name = "room 1.2",   number = 14, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False)], actors = []}
-	room13		= {name = "room 1.3",   number = 15, roomStatus = detectors, inventory = [FireExtinguisher,Plug], exits = [(North 12, False), (South 16, False)], actors = []}
+	room13		= {name = "room 1.3",   number = 15, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 12, False), (South 16, False)], actors = []}
 	corridor1	= {name = "corridor 1", number = 16, roomStatus = detectors, inventory = [], exits = [(North 13, False), (North 14, False), (North 15, False)
                                                                                                      , (South 17, False), (South 18, False), (South 19, False)
                                                                                                      , (Up 5, False)
@@ -395,11 +399,6 @@ where
 	front1		= {name = "back 1",     number = 22, roomStatus = detectors, inventory = [], exits = [(North 20, False), (North 21, False), (Up 11, False)], actors = []}
 	
 	detectors = [FireDetector False,SmokeDetector False,FloodDetector False]
-
-
-
-
-
 
 
 // shortest path given the alarms set on the ship
@@ -426,12 +425,15 @@ mapImage mngmnt (m, _) tsrc
                       , (mkActorBadgeBackground NotAvailable, "Unavailable person")
                       , (mkActorBadgeBackground Busy, "Busy person")
                       , (mkInventoryBadgeBackground, "Room inventory")
-                      , (mkUpDown (Up 0, False), "Staircase up")
-                      , (mkUpDown (Down 0, False), "Staircase down")
+                      , (mkUpDown 0 (Up 0, False), "Staircase up")
+                      , (mkUpDown 0 (Down 0, False), "Staircase down")
                       ]
   #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
+
+floorWidth :: !MyFloor -> Int
+floorWidth floor = foldr (\xs -> max (length xs)) 0 floor
 
 floorImage :: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (!MyMap, MapClick), !*TagSource)
 floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
@@ -445,7 +447,7 @@ floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 64.0
-exitWidth =: 12.0
+exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
@@ -474,11 +476,11 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
                         (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
-  #! upDownExits    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkUpDown) (upEs ++ downEs)) Nothing
-  #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs1 bgWidth numNorth (AtLeft, AtTop) northEs
-  #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs1 bgWidth numSouth (AtLeft, AtBottom) southEs
-  #! (rExitAligns, rExitOffsets, rExitImgs) = mkAsOsIs2 bgHeight numEast (AtRight, AtTop) eastEs
-  #! (lExitAligns, lExitOffsets, lExitImgs) = mkAsOsIs2 bgHeight numWest (AtLeft, AtTop) westEs
+  #! upDownExits    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o (mkUpDown number)) (upEs ++ downEs)) Nothing
+  #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs (\sp -> (sp, px 0.0)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numNorth (AtLeft, AtTop)    northEs
+  #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs (\sp -> (sp, px 0.0)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numSouth (AtLeft, AtBottom) southEs
+  #! (rExitAligns,   rExitOffsets,   rExitImgs)   = mkAsOsIs (\sp -> (px 0.0, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numEast  (AtRight, AtTop)   eastEs
+  #! (lExitAligns,   lExitOffsets,   lExitImgs)   = mkAsOsIs (\sp -> (px 0.0, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numWest  (AtLeft, AtTop)    westEs
   #! total          = overlay ([(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)] ++ topExitAligns ++ botExitAligns ++ rExitAligns ++ lExitAligns)
                               ([(px 3.0, px 3.0), (px -3.0, px 3.0), (zero, zero), (px 3.0, px -3.0), (px -3.0, px -3.0)] ++ topExitOffsets ++ botExitOffsets ++ rExitOffsets ++ lExitOffsets)
                               ([statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
@@ -492,36 +494,34 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
   foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
   foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
-  mkAsOsIs1 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
-  mkAsOsIs1 bgWidth num align es
+  mkAsOsIs :: !(Span -> (!Span, !Span)) !(Image (!MyMap, !MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)]
+           -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
+  mkAsOsIs mkTuple doorImg bgSize num align es
     #! exitAligns  = repeatn num align
-    #! incr        = bgWidth / toReal (num + 1)
-    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px (n * incr - (exitWidth / 2.0)), px 0.0) : xs], n + 1.0)) ([], 1.0) es)
-    #! exitImgs    = map (mkDoor o snd) es
+    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([mkTuple (px n) : xs], n + roomDim)) ([], (roomDim - exitWidth) / 2.0) es)
+    #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
-    mkDoor :: !Locked -> Image (!MyMap, !MapClick)
-    mkDoor locked = xline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
-                                                 <@< { strokewidth = px 3.0 }
-
-  mkAsOsIs2 :: !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)] -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
-  mkAsOsIs2 bgHeight num align es
-    #! exitAligns  = repeatn num align
-    #! incr        = bgHeight / toReal (num + 1)
-    #! exitOffsets = fst (foldr (\_ (xs, n) -> ([(px 0.0, px (n * incr - (exitWidth / 2.0))) : xs], n + 1.0)) ([], 1.0) es)
-    #! exitImgs    = map (mkDoor o snd) es
-    = (exitAligns, exitOffsets, exitImgs)
-    where
-    mkDoor :: !Locked -> Image (!MyMap, !MapClick)
-    mkDoor locked = yline Nothing (px exitWidth) <@< { stroke = toSVGColor (if locked "black" "white") }
-                                                 <@< { strokewidth = px 3.0 }
+    mkDoor :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
+    mkDoor (exit, locked)
+      = doorImg
+          <@< { stroke = toSVGColor "black" }
+          <@< { strokewidth = px 1.0 }
+          <@< { fill = toSVGColor (if locked "black" "white") }
+          <@< { onclick = onClick (ToggleDoor number exit), local = False }
 
 onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
 onClick clck _ (m, _) = (m, clck)
 
-mkUpDown :: !(!Exit, Locked) -> Image a
-mkUpDown (Up _, _)   = polygon Nothing [(px 0.0, px 0.0), (px 8.0, px -8.0), (px 8.0, px 0.0)]
-mkUpDown (Down _, _) = polygon Nothing [(px 0.0, px -8.0), (px 8.0, px 0.0), (px 0.0, px 0.0)]
+mkUpDown :: !RoomNumber !(!Exit, Locked) -> Image (!MyMap, !MapClick)
+mkUpDown n (e=:(Up _), l)
+  = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
+      <@< { opacity = if l 0.3 1.0 }
+      <@< { onclick = onClick (ToggleDoor n e), local = False }
+mkUpDown n (e=:(Down _), l)
+  = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
+      <@< { opacity = if l 0.3 1.0 }
+      <@< { onclick = onClick (ToggleDoor n e), local = False }
 
 mkStatusBadge :: Int !Bool !Real !Detector ![Image (!MyMap, !MapClick)] -> [Image (!MyMap, !MapClick)]
 mkStatusBadge roomNo mngmnt badgeMult d acc
@@ -545,9 +545,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! userStr     = toString userName
   #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
   #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
-  #! inventory   = if (length carrying > 0)
-                     [mkInventoryBadge (toString (length carrying))]
-                     []
+  #! inventory   = map (\i -> mkInventoryBadge (toString i % (0,0))) carrying
   = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
 mkActorBadgeBackground :: !Availability -> Image a
@@ -568,4 +566,3 @@ mkInventoryBadgeBackground
 badgeImage :: Image a
 badgeImage = rect (px 11.0) (px 11.0) <@< { stroke = toSVGColor "black" }
                                       <@< { strokewidth = px 1.0 }
-
