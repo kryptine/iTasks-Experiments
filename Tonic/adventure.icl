@@ -91,66 +91,90 @@ addActorToMap roomViz actor location smap
 					Nothing	 	-> 			if (existsRoom location map)
 									(		updateRoom location (entering actor) smap
 									>>|		viewInformation ("You are in room " <+++ location <+++ ", now you can walk around") [] ()
-									>>|		moveAround roomViz actor Nothing smap @! () 
+									>>|		moveAround roomViz actor noTask smap @! () 
 									)(		viewInformation ("Room with number: " <+++ location <+++ " does not exist") [] () >>| return ()
 									)
 					Just (loc,me) ->		viewInformation ("You are already in room" <+++ loc) [] () >>| return ()
+where
+	noTask :: Maybe (ActorTask r o a ()) | iTask r & iTask o & iTask a & Eq o
+	noTask = Nothing
 
-moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 moveAround roomViz actor mbtask smap
-	= 			repeatTask (\_ -> moveOneStep roomViz actor mbtask smap) id False
+	= 			repeatTask (\_ -> moveOneStep roomViz actor mbtask smap) (not o isNothing) Nothing
 
-moveOneStep :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveOneStep :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 moveOneStep roomViz actor mbtask smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
 					(	 (		( roomViz room //    viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
-								 >>*    exitActions room nactor
-                                     ++ inventoryActions room nactor
-								     ++ carryActions room nactor
+								 >>* (   exitActions room nactor		
+                                      ++ inventoryActions room nactor 
+								      ++ carryActions room nactor		
+								     ) @! Nothing
 								)
 								-||- 
-								(if (isNothing mbtask) (viewInformation "-" [] () @! False ) ((fromJust mbtask) actor room map))  // Why a continue button ???
-								
+								(if (isNothing mbtask) (viewInformation "" [] () @!  Nothing) ((fromJust mbtask) actor room map))  
 						)
 			    )
 			)
 where
     exitActions room nactor
-      = [ OnAction (Action ("Go " <+++ exit) []) (always (move nactor room.number (fromExit exit) smap))
+      = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) nactor smap))
         \\ (exit, _) <- room.exits
         ]
     inventoryActions room nactor
-      = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject nactor room object smap))
+      = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object nactor smap))
         \\ object <- room.inventory
         ]
     carryActions room nactor
-      = [ OnAction (Action ("Drop " <+++ object) []) (always (dropDownObject nactor room object smap))
+      = [ OnAction (Action ("Drop " <+++ object) []) (always (dropDownObject room.number object nactor smap))
         \\ object <- nactor.carrying
         ]
 
-	pickupObject actor room object smap
-		=				updateRoom room.number (fetchObject object) smap
-		>>|				return {actor & carrying = [object:actor.carrying]}
-		>>= \actor ->	updateRoom room.number (updateActor actor) smap
-		>>|				return False
-	
-	dropDownObject actor room object smap
-		=				updateRoom room.number (dropObject object) smap
-		>>|				return {actor & carrying = removeMember object actor.carrying}
-		>>= \actor ->	updateRoom room.number (updateActor actor) smap
-		>>|				return False
+pickupObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+pickupObject roomNumber object actor smap
+	=		updateRoom roomNumber (fetchObject object) smap
+	>>|		updateRoom roomNumber (updateActor {actor & carrying = [object:actor.carrying]}) smap
+	>>|		return True
 
-	move actor fromRoom toRoom smap
-		= 				updateRoom fromRoom (leaving actor) smap
-		>>| 			updateRoom toRoom (entering actor) smap
-		>>|				return False
+dropDownObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+dropDownObject roomNumber object actor smap
+	=		updateRoom roomNumber (dropObject object) smap
+	>>|		updateRoom roomNumber (updateActor {actor & carrying = removeMember object actor.carrying}) smap
+	>>|		return True
 
+move ::  RoomNumber RoomNumber (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+move fromRoom toRoom actor smap
+	= 		updateRoom fromRoom (leaving actor) smap
+	>>| 	updateRoom toRoom (entering actor) smap
+	>>|		return True
 
-// perform a task given from outside
+useObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+useObject roomNumber object actor smap
+	=		updateRoom roomNumber (updateActor {actor & carrying = removeMember object actor.carrying}) smap
+	>>|		return True
 
+// auto moves around the maze
+
+autoMove :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+autoMove thisRoom target pathFun actor smap
+| thisRoom == target 
+	= 	return True
+= 			   		get smap
+	>>= \curMap -> 	let room 	= findRoom actor curMap 
+				 		nactor  = latestActorStatus actor room
+				 		path	= pathFun thisRoom target curMap
+					in	if (isEmpty path) (return False)
+						(		let nextRoom = fromExit (hd path)
+								in			move room.number nextRoom nactor smap
+					 				>>|		waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
+					 				>>|		autoMove nextRoom target pathFun actor smap
+						)
+		
+delay = 5
 
 // room updating
 

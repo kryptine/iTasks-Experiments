@@ -32,27 +32,31 @@ from Data.IntMap.Strict import :: IntMap
 
 instance == (Actor o a)  
 
+fromExit :: Exit -> Int
+
 derive class iTask Room, Exit, Actor
 
 // place an new actor into a room of your shared map after which the actor can freely move around
 
 addActorToMap :: ((Room r o a) -> Task ()) (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 
-// a new actor tasks with indicated priority can be assigned to a user walking as actor on the map
+// move around the map until you return something
 
-moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 
-//addTaskWhileWalking :: ((Room r o a) -> Task ()) User User String String (ActorTask r o a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+//moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a)) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+
 
 // the actor task will constantly be informed about the latest state of the actor, room, and map
 // return True to stop the task
 
-:: ActorTask r o a	:== (Actor o a) (Room r o a) (MAP r o a) -> Task Bool
+:: ActorTask r o a b :== (Actor o a) (Room r o a) (MAP r o a) -> Task (Maybe b)
 
 // finds all actors currently walking on the map, find all objects in the map
 
-findAllActors  :: (MAP r o a) -> [(RoomNumber,(Actor o a))] 
-findAllObjects :: (MAP r o a) -> [(RoomNumber,o)]
+findAllActors  	:: (MAP r o a) -> [(RoomNumber,(Actor o a))] 
+findAllObjects 	:: (MAP r o a) -> [(RoomNumber,o)]
+findUser 		:: User (MAP r o a) ->  Maybe (RoomNumber,(Actor o a))
 
 // update the status of an actor, unique username is used as identification
 
@@ -77,6 +81,14 @@ unlockExit 	:: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask
 // shortest path calculation
 
 shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
+
+// auto movement from actors thru the map, fetching. dropping and using objects
+
+autoMove 	   	:: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+pickupObject   	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+useObject 	   	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+dropDownObject 	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
+
 
 
 

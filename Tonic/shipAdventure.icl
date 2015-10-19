@@ -100,45 +100,56 @@ where
 giveInstructions :: Task ()
 giveInstructions 
 =	forever 
-	(			get currentUser
-	>>= \me ->  						showAlarms 
-					>>= \alarms -> 		(							enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms
-											>&> 					withSelection (viewInformation () [] "No Alarm Selected")
-								 			\(alarmLoc,detector) -> selectSomeOneToHandle (alarmLoc,detector)
-								 			>&>						withSelection (viewInformation () [] "No Crew Member Selected")
-								 			\(actorLoc,actor) ->	viewObject (actorLoc,actor) (alarmLoc,detector)
-								 			>&>						withSelection (viewInformation () [] "")
-											\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
-											>>* 					[ OnAction  ActionOk     (hasValue (\prio -> return (me,(alarmLoc,detector),(actorLoc,actor),prio)))
-					       											]
-					       				)
-					>>- \result ->		handleAlarm result
+	(					get currentUser
+	>>= \me ->  		showAlarms 
+	>>= \alarms -> 		(							selectAlarm alarms
+							>&> 					withSelection (viewInformation () [] "No Alarm Selected")
+				 			\(alarmLoc,detector) -> selectSomeOneToHandle (alarmLoc,detector)
+				 			>&>						withSelection (viewInformation () [] "No Crew Member Selected")
+				 			\(actorLoc,actor) ->	viewObject (actorLoc,actor) (alarmLoc,detector)
+				 			>&>						withSelection (viewInformation () [] "")
+							\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
+							>>* 					[ OnAction ActionByHand  	 (hasValue (\prio -> handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),prio)))
+	       											, OnAction ActionSimulated  (hasValue (\prio -> autoHandleAlarm actor.userName (alarmLoc,detector) Blanket @! ()))
+													, OnAction ActionCancel (always (return ()))
+	       											]
+	       				)
 	)
+where
+	ActionByHand 		= Action "By Hand"  []
+	ActionSimulated 	= Action "Simulate" []	
+	
+
+selectAlarm alarms
+	=	whileUnchanged myMap 
+			(\curMap -> enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms)
+	
 
 handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 # instruction = FightFireInRoom alarmLoc 
 = 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
  >>|	addLog "Commander" actor.userName ("Instruction:" <+++ instruction)
- >>| 	appendTopLevelTaskPrioFor me "Wait for fire handling report" "High" True 
- 			(addTaskWhileWalking actor ("Fight Fire in Room " <+++ alarmLoc) (toSingleLineText priority) 
- 			 (handleFireTask instruction) ) @! ()
+ >>| 	appendTopLevelTaskPrioFor me ("Report on Fire in " <+++ alarmLoc) "High" True 
+ 			(addTaskWhileWalking actor ("Fight Fire in " <+++ alarmLoc) (toSingleLineText priority) 
+ 			 (handleFireTask (alarmLoc,detector)) ) @! ()
 
 handleAlarm _  = return ()
 
-addTaskWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task Bool) -> Task ()
+addTaskWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe a)) -> Task () | iTask a
 addTaskWhileWalking actor title priority task 
-	=					((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
+	=					(((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
 						-||-
-						(viewInformation ("Kill task " <+++ title <+++ "...") [] () @! False)
-	>>= \b ->	if b	(viewInformation ("Task " <+++ title <+++ " terminated normally") [] ())
+						(viewInformation ("Cancel task \"" <+++ title <+++ "\"") [] () @! Nothing))
+	>>= \mba ->	if (isNothing mba)
 	 					(viewInformation ("Task " <+++ title <+++ " has been cancelled by you") [] ())
+						(viewInformation ("Task " <+++ title <+++ " terminated normally, returning:") [] (fromJust mba) @! ())
 	>>|			return ()
 
-handleFireTask :: Instruction MyActor MyRoom MyMap -> Task Bool
-handleFireTask (FightFireInRoom nr) curActor curRoom curMap
-	=		(viewInformation ("Fight Fire in Room: " <+++ nr) []  ()
+handleFireTask :: (RoomNumber,Detector) MyActor MyRoom MyMap -> Task (Maybe String)
+handleFireTask (alarmLoc,detector) curActor curRoom curMap
+	=		(viewInformation ("Fight " <+++ detector <+++ " in Room: " <+++ alarmLoc) []  ()
 			-||- 
-			viewInformation ("Shortest Path to Fire: " <+++ shipShortestPath curRoom.number nr curMap) [] ()
+			viewInformation ("Shortest Path to alarm: " <+++ shipShortestPath curRoom.number alarmLoc curMap) [] ()
 			-||-
 			let (_,distExt) = statResource FireExtinguisher curRoom.number curMap in
 				viewInformation ("Shortest Path to a FireExtinguiser: " <+++ distExt) [] ()
@@ -146,10 +157,51 @@ handleFireTask (FightFireInRoom nr) curActor curRoom curMap
 			let (_,distBlanket) = statResource Blanket curRoom.number curMap in
 				viewInformation ("Shortest Path to a Blanket: " <+++ distBlanket) [] ()
 			)
-			>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == nr) (return True))
-				,OnAction (Action "Need More Help" []) (always (return False))
+			>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == alarmLoc) (return (Just "Fire Extinguised")))
+				,OnAction (Action "Need More Help" []) (always succesful)
 				]
-	
+where
+	succesful 
+		=		updRoomStatus alarmLoc (updDetector resetDetector detector) myMap
+		>>|		return (Just "I need more help...")
+
+// simulate via auto stuf
+
+autoHandleAlarm user (alarmLoc,detector) object
+	=	appendTopLevelTaskPrioFor user ("Auto handling Alarm " <+++ detector <+++ " in room " <+++ alarmLoc) "High" True 
+ 			(autoHandlingFire user (alarmLoc,detector) object) @! ()
+
+autoHandlingFire :: User (RoomNumber,Detector) Object -> Task Bool
+autoHandlingFire user (alarmLoc,detector) object
+	=				updActorStatus user (\st -> {st & occupied = Busy}) myMap
+ 	>>|				addLog "Commander" user ("Auto Fighting " <+++ detector <+++ " in " <+++ alarmLoc)
+ 	>>|				get myMap
+	>>= \curMap ->	let (myLoc,curActor) = fromJust (findUser user curMap) 					// you better be on the map, to be fixed later
+						objectLoc     	 = fromJust (findClosest myLoc object curMap)		// there better be objects,  to be fixed later
+					in execute [ autoMove myLoc objectLoc shipShortestPath
+							   , pickupObject objectLoc object
+							   , autoMove objectLoc alarmLoc shipShortestPath
+							   , useObject alarmLoc object
+							   , resetAlarm (alarmLoc,detector)
+							   ] curActor 
+	>>|				updActorStatus user (\st -> {st & occupied = Available}) myMap
+ 	>>|				addLog "Commander" user ("Aoto Fighting Finished " <+++ detector <+++ " in " <+++ alarmLoc)
+ 	>>|				return True
+where
+	execute [] 			actor 
+		= return True
+	execute [fun:funs]	actor 
+		= 				fun actor myMap
+			>>= \b ->	if (not b) (return b)
+						   (execute funs actor)			
+
+resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task Bool
+resetAlarm (alarmLoc,detector) _ smap
+	 = updRoomStatus alarmLoc (updDetector resetDetector detector) smap @! True		
+
+findClosest roomNumber object curMap
+	= 	let revPath = reverse (snd (snd (statResource object roomNumber curMap)))
+		in if (isEmpty revPath) Nothing (Just (fromExit (hd revPath)))
 
 mkRoom :: MyRoom -> Task ()
 mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick @! ()
@@ -183,9 +235,9 @@ viewObject (actorLoc,actor) (alarmLoc,FireDetector _)
 			\curMap -> 	let		(nrExt,(distExt,_)) 			= statResource FireExtinguisher actorLoc curMap
 								(nrBlankets,(distBlankets,_)) 	= statResource Blanket 			actorLoc curMap
 						in	viewInformation ("Distances Between " <+++ actor.userName <+++ " and Currently Available Resources") [] 
-								[ "The Fire Detected in Room: " <+++ alarmLoc <+++ " is " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
-								, "Closest Extinquisher is " <+++ distExt <+++ " Rooms Away."
-								, "Closest Blanket is " <+++ distBlankets <+++ " Rooms Away."
+								[ "The Fire Detected in room " <+++ alarmLoc <+++ ": " <+++ length (shipShortestPath actorLoc alarmLoc curMap) <+++ " Rooms Away."
+								, "Closest Extinquisher: " <+++ distExt <+++ " Rooms Away."
+								, "Closest Blanket: " <+++ distBlankets <+++ " Rooms Away."
 								, "Available Extinquishers: "  <+++ nrExt 
 								, "Available Blankets: "  <+++ nrBlankets 
 								] @! ()
@@ -228,17 +280,26 @@ setRoomDetectors :: Task ()
 setRoomDetectors 
 	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
       >>* [OnValue (\tv -> case tv of
-                             Value (ToggleAlarm selRoom d) _ -> Just (updRoomStatus selRoom (updDetector d) myMap >>| setRoomDetectors)
+                             Value (ToggleAlarm selRoom d) _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
-    where
-    updDetector :: !Detector !RoomStatus -> RoomStatus
-    updDetector d r = [if (d =+?= d`) (toggleDetector d`) d` \\ d` <- r]
+updDetector :: !(Detector -> Detector) !Detector !RoomStatus -> RoomStatus
+updDetector f d r = [if (d =+?= d`) (f d`) d` \\ d` <- r]
 
 toggleDetector :: !Detector -> Detector
-toggleDetector (FireDetector  b) = FireDetector (not b)
+toggleDetector (FireDetector  b) = FireDetector  (not b)
 toggleDetector (SmokeDetector b) = SmokeDetector (not b)
 toggleDetector (FloodDetector b) = FloodDetector (not b)
+
+setDetector :: !Detector -> Detector
+setDetector (FireDetector  b) = FireDetector  True
+setDetector (SmokeDetector b) = SmokeDetector True
+setDetector (FloodDetector b) = FloodDetector True
+
+resetDetector :: !Detector -> Detector
+resetDetector (FireDetector  b) = FireDetector  False
+resetDetector (SmokeDetector b) = SmokeDetector False
+resetDetector (FloodDetector b) = FloodDetector False
 
 // Logging events
 
@@ -312,6 +373,7 @@ isHigh (FloodDetector b) = b
 
 // shortest path given the alarms set on the ship
 
+shipShortestPath :: RoomNumber RoomNumber MyMap -> [Exit]
 shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
   where
   cost detectors = 1 + sum (map detectorCost detectors)
