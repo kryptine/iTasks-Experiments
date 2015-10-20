@@ -62,6 +62,13 @@ isHigh (FireDetector  b) = b
 isHigh (SmokeDetector b) = b
 isHigh (FloodDetector b) = b
 
+// should be in the library somewhere
+
+mkTable :: [String]  ![a] -> Table | gText{|*|} a
+mkTable	headers a = Table headers (map row a) Nothing
+where
+	row x =  [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
+
 // shared stores:
 
 myMap  :: Shared MyMap						// map of the ship
@@ -69,6 +76,14 @@ myMap = sharedStore "myBuilding" myShip
 
 myLog :: Shared [Log]						// logging events					
 myLog = sharedStore "myLog" []
+
+alarmChanged :: Shared Bool					// to notify that one of the alarms has changed, should be turned into a lens
+alarmChanged = sharedStore "alarms" False
+
+actorStatusChanged :: Shared Bool			 // to notify that the status of one the actors has changed, should be tuned into a lens 
+actorStatusChanged = sharedStore "actors" False
+
+toggle b = not b
 
 // main tasks
 
@@ -93,7 +108,9 @@ myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions
 actorWithInstructions :: User  -> Task ()
 actorWithInstructions user 
 	=			enterInformation "Which room do you want to start in?" []
-	>>= \loc ->	addActorToMap mkRoom (newActor user) loc myMap
+	>>= \loc ->	addLog user "" ("Entered the building starting in room " <+++ loc)
+ 	>>|			upd toggle actorStatusChanged 
+ 	>>|			addActorToMap mkRoom (newActor user) loc myMap
 where
 	newActor user 			
 		= {userName = user, carrying = [], actorStatus = {occupied = Available}}
@@ -123,14 +140,15 @@ where
 	ActionSimulated 	= Action "Simulate" []	
 
 	selectAlarm alarms
-		=	whileUnchanged myMap 
-				(\curMap -> enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms)
+		=	whileUnchanged alarmChanged 
+				(\_ -> enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms)
 
 	selectSomeOneToHandle :: (RoomNumber,Detector) -> Task (Int,MyActor)
 	selectSomeOneToHandle (number,detector)
-		=	whileUnchanged myMap 
-				(\curMap ->  let allActors = findAllActors curMap in
-								enterChoice (if (isEmpty allActors) "No one available at all !: : " "Who should handle: " <+++ showAlarm (number,detector)) [] allActors)
+		=	whileUnchanged actorStatusChanged 
+				 (\_ ->		  		get myMap
+				  >>= \curMap ->  	let allActors = findAllActors curMap in
+									enterChoice (if (isEmpty allActors) "No one available at all !" ("Who should handle: " <+++ showAlarm (number,detector))) [] allActors)
 
 	viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
 	viewRelativeStatus (actorLoc,actor) (alarmLoc,FireDetector _)
@@ -158,14 +176,10 @@ where
 											 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
 											 ]) @! ()
 
-mkTable :: [String]  ![a] -> Table | gText{|*|} a
-mkTable	headers a = Table headers (map row a) Nothing
-where
-	row x =  [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
 
 
 handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
-= 		updActorStatus actor.userName (\st -> {st & occupied = Busy}) myMap
+= 		updStatusOfActor actor.userName Busy myMap
  >>|	addLog ("Commander " <+++ me) actor.userName (message "Start Handling ")
  >>| 	appendTopLevelTaskPrioFor me (message "Wait for ") "High" True 
  			(handleWhileWalking actor (message "Handle ") (toSingleLineText priority) 
@@ -199,9 +213,7 @@ where
 								 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ goto dirBlanket <+++ ")")
 								 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ goto dirPlug <+++ ")")
 								 ])) @! ()
-				>>* [OnAction (Action "Fire Extinguished" []) (ifCond (curRoom.number == alarmLoc) (return (Just "Fire Extinguised")))
-
-					,OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) useExtinquisher)
+				>>* [OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) useExtinquisher)
 					,OnAction (Action "Use Blanket" []) 			(ifCond (mayUseBlanket detector) useBlanket)
 					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) usePlug)
 					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) smokeReport)
@@ -223,21 +235,25 @@ where
 
 		useExtinquisher		=		useObject alarmLoc FireExtinguisher curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
-   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| updStatusOfActor curActor.userName Available myMap
+   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
    								>>| return (Just "Fire Extinguised")
 
 		useBlanket			=		useObject alarmLoc Blanket curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
-   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| updStatusOfActor curActor.userName Available myMap
+   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
    								>>| return (Just "Fire Extinguised")
 		
 		usePlug				=		useObject alarmLoc Plug curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
-   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| updStatusOfActor curActor.userName Available myMap
+   								>>| viewInformation "Well Done, Flooding Stopped" [] ()
    								>>| return (Just "Flooding Stopped")
 
 		smokeReport			=		resetAlarm (alarmLoc,detector) actor myMap
-   								>>| updActorStatus curActor.userName (\st -> {st & occupied = Available}) myMap
+   								>>| updStatusOfActor curActor.userName Available myMap
+   								>>| viewInformation "Well Done, Reason of Smoke Detected" [] ()
    								>>| return (Just "Don't smoke under a smoke detector !!")
 
 		goto []  = ", you are there"
@@ -247,6 +263,18 @@ where
 			=		updRoomStatus alarmLoc (updDetector resetDetector detector) myMap
 			>>|		return (Just "I need more help...")
 
+updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
+updStatusOfActor user availability smap
+	=		updActorStatus user (\st -> {st & occupied = Busy}) smap
+ 	>>|		upd toggle actorStatusChanged
+ 	>>|		addLog user "" ("Has become " <+++ availability)
+
+resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task ()
+resetAlarm (alarmLoc,detector) actor smap
+	= 		updRoomStatus alarmLoc (updDetector resetDetector detector) smap
+	>>|		upd toggle alarmChanged		
+	>>|		addLog actor.userName alarmLoc  ("Resets " <+++ detector) 
+
 // simulate via auto stuf
 
 autoHandleAlarm commander user (alarmLoc,detector) 
@@ -255,7 +283,7 @@ autoHandleAlarm commander user (alarmLoc,detector)
 
 startSimulation :: User User (RoomNumber,Detector) -> Task Bool
 startSimulation commander user (alarmLoc,detector) 
-	=				updActorStatus user (\st -> {st & occupied = Busy}) myMap
+	=				updStatusOfActor user Busy myMap 
  	>>|				addLog commander user ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
  	>>|				get myMap 
 	>>= \curMap ->	let (myLoc,curActor) 		= fromJust (findUser user curMap) 						
@@ -265,13 +293,13 @@ startSimulation commander user (alarmLoc,detector)
 						  if (isNothing mbObject)													
 						  	(simulateHandling myLoc alarmLoc detector curActor myMap)
 						  	(simulateHandlingWithObject myLoc (fromJust mbObject) (fromJust mbObjectLoc) alarmLoc detector curActor myMap) 
-	>>= \succes ->	updActorStatus user (\st -> {st & occupied = Available}) myMap
+	>>= \succes ->	updStatusOfActor user Available myMap 
  	>>|				addLog user commander  ("Simulation Handling " <+++ toString detector <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
  	>>|				return True
 
 simulateHandling startLoc alarmLoc detector actor smap
 	=						autoMove startLoc alarmLoc shipShortestPath actor smap
-   	>>= \targetReached ->	if targetReached (resetAlarm (alarmLoc,detector) actor smap)
+   	>>= \targetReached ->	if targetReached (resetAlarm (alarmLoc,detector) actor smap @! True)
    							(return False)
 
 simulateHandlingWithObject startLoc object objectLoc alarmLoc detector actor smap
@@ -279,17 +307,11 @@ simulateHandlingWithObject startLoc object objectLoc alarmLoc detector actor sma
    	>>= \objectReached	->	if objectReached	(pickupObject objectLoc object actor smap
    	>>= \objectFound	->	if objectFound		(autoMove objectLoc alarmLoc shipShortestPath actor smap
    	>>= \targetReached ->	if targetReached	(useObject alarmLoc object actor smap
-   	>>= \used ->			if used		 		(resetAlarm (alarmLoc,detector) actor smap)
+   	>>= \used ->			if used		 		(resetAlarm (alarmLoc,detector) actor smap @! True)
 												(return False))
 												(return False))
 												(return False))
 												(return False)
-
-resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task Bool
-resetAlarm (alarmLoc,detector) actor smap
-	= 		updRoomStatus alarmLoc (updDetector resetDetector detector) smap 		
-	>>|		addLog actor.userName alarmLoc  ("Resets " <+++ detector)  @! True
-
 
 findClosestObject :: RoomNumber (RoomNumber,Detector) MyMap -> (Maybe RoomNumber,Maybe Object)
 findClosestObject  myLoc (alarmLoc,detector) curMap
