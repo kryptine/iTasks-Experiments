@@ -424,44 +424,38 @@ where
                   , [corridor0]
                   , [room04, room05, room06]
                   , [room07, room08]
-                  , [front0]
                   ]
-	back0		= {name = "front 0",    number = 1,  roomStatus = detectors, inventory = [], exits = [(South 2, False), (South 3, False), (South 4, False), (Down 12, False)], actors = []}
-	room01		= {name = "room 0.1",   number = 2,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False)], actors = []}			
+	back0		= {name = "back 0",    number = 1,  roomStatus = detectors, inventory = [], exits = [(South 2, False), (South 3, False), (South 4, False)], actors = []}
+	room01		= {name = "room 0.1",   number = 2,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False), (Down 13, False)], actors = []}			
 	room02		= {name = "room 0.2",   number = 3,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False)], actors = []}			
 	room03		= {name = "room 0.3",   number = 4,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 1, False), (South 5, False)], actors = []}
 	corridor0	= {name = "corridor 0", number = 5,  roomStatus = detectors, inventory = [], exits = [(North 2, False), (North 3, False), (North 4, False)
                                                                                                      , (South 6, False), (South 7, False), (South 8, False)
-                                                                                                     , (Down 16, False)
                                                                                                      ], actors = []}
 	room04		= {name = "room 0.4",   number = 6,  roomStatus = detectors, inventory = [], exits = [(North 5, False), (South 9, False)], actors = []}			
-	room05		= {name = "room 0.5",   number = 7,  roomStatus = detectors, inventory = [Blanket], exits = [(North 5, False), (South 9, False), (South 10, False)], actors = []}			
+	room05		= {name = "room 0.5",   number = 7,  roomStatus = detectors, inventory = [Blanket], exits = [(North 5, False), (South 9, False)], actors = []}			
 	room06		= {name = "room 0.6",   number = 8,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 5, False), (South 10, False)], actors = []}
-	room07		= {name = "room 0.7",   number = 9,  roomStatus = detectors, inventory = [Blanket], exits = [(North 6, False), (North 7, False), (South 11, False)], actors = []}			
-	room08		= {name = "room 0.8",   number = 10, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 7, False), (North 8, False), (South 11, False)], actors = []}
-	front0		= {name = "back 0",     number = 11, roomStatus = detectors, inventory = [], exits = [(North 9, False), (North 10, False), (Down 22, False)], actors = []}
+	room07		= {name = "room 0.7",   number = 9,  roomStatus = detectors, inventory = [Blanket], exits = [(North 6, False), (North 7, False)], actors = []}			
+	room08		= {name = "room 0.8",   number = 10, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 8, False), (Down 21, False)], actors = []}
 
 	floor1  	= [ [back1]
                   , [room11, room12, room13]
                   , [corridor1]
                   , [room14, room15, room16]
                   , [room17, room18]
-                  , [front1]
                   ]
-	back1		= {name = "front 1",    number = 12, roomStatus = detectors, inventory = [], exits = [(South 13, False), (South 14, False), (South 15, False), (Up 1, False)], actors = []}
-	room11		= {name = "room 1.1",   number = 13, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False)], actors = []}
-	room12		= {name = "room 1.2",   number = 14, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False)], actors = []}
-	room13		= {name = "room 1.3",   number = 15, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 12, False), (South 16, False)], actors = []}
+	back1		= {name = "back 1",    number = 12, roomStatus = detectors, inventory = [], exits = [(South 13, False), (South 14, False), (South 15, False)], actors = []}
+	room11		= {name = "room 1.1",   number = 13, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False), (Up 2, False)], actors = []}
+	room12		= {name = "room 1.2",   number = 14, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False), (East 15, False)], actors = []}
+	room13		= {name = "room 1.3",   number = 15, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 12, False), (South 16, False), (West 14, False)], actors = []}
 	corridor1	= {name = "corridor 1", number = 16, roomStatus = detectors, inventory = [], exits = [(North 13, False), (North 14, False), (North 15, False)
                                                                                                      , (South 17, False), (South 18, False), (South 19, False)
-                                                                                                     , (Up 5, False)
                                                                                                      ], actors = []}
 	room14		= {name = "room 1.4",   number = 17, roomStatus = detectors, inventory = [], exits = [(North 16, False), (South 20, False)], actors = []}
-	room15		= {name = "room 1.5",   number = 18, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 16, False), (South 20, False), (South 21, False)], actors = []}
+	room15		= {name = "room 1.5",   number = 18, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 16, False), (South 20, False)], actors = []}
 	room16		= {name = "room 1.6",   number = 19, roomStatus = detectors, inventory = [], exits = [(North 16, False), (South 21, False)], actors = []}
-	room17		= {name = "room 1.7",   number = 20, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 17, False), (North 18, False), (South 22, False)], actors = []}
-	room18		= {name = "room 1.8",   number = 21, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 18, False), (North 19, False), (South 22, False)], actors = []}
-	front1		= {name = "back 1",     number = 22, roomStatus = detectors, inventory = [], exits = [(North 20, False), (North 21, False), (Up 11, False)], actors = []}
+	room17		= {name = "room 1.7",   number = 20, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 17, False), (North 18, False)], actors = []}
+	room18		= {name = "room 1.8",   number = 21, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 19, False), (Up 10, False)], actors = []}
 	
 	detectors = [FireDetector False,SmokeDetector False,FloodDetector False]
 
