@@ -212,6 +212,7 @@ lockExit roomNo exit smap = updExit roomNo exit smap (const True)
 unlockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 unlockExit roomNo exit smap = updExit roomNo exit smap (const False)
 
+updExit :: RoomNumber Exit (Shared (MAP r o a)) (Locked -> Locked) -> Task () | iTask r & iTask o & iTask a & Eq o
 updExit roomNo exit smap lockf
   = upd (map (map (map updRoom))) smap @! ()
   where
