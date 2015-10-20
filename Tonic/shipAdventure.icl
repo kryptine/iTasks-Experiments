@@ -176,8 +176,6 @@ where
 											 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
 											 ]) @! ()
 
-
-
 handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 = 		updStatusOfActor actor.userName Busy myMap
  >>|	addLog ("Commander " <+++ me) actor.userName (message "Start Handling ")
@@ -187,9 +185,11 @@ handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 where
 	message work = (work <+++ toString detector <+++ " in Room " <+++ alarmLoc)
 
-	handleWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe a)) -> Task () | iTask a
+	handleWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe (Task (Maybe String)))) -> Task () 
 	handleWhileWalking actor title priority task 
-		=					(((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
+		=					(((actor.userName,title)  @:( 				moveAround mkRoom actor (Just task) myMap 
+							 							>>= \mbTask ->  fromJust mbTask))
+
 							-||-
 							(viewInformation ("Cancel task \"" <+++ title <+++ "\"") [] () @! Nothing))
 		>>= \mba ->	if (isNothing mba)
@@ -197,7 +197,8 @@ where
 							(viewInformation ("Task " <+++ title <+++ " terminated normally, returning:") [] (fromJust mba) @! ())
 		>>|			return ()
 	
-	taskToDo :: (RoomNumber,Detector) MyActor MyRoom MyMap -> Task (Maybe String)
+
+	taskToDo :: (RoomNumber,Detector) MyActor MyRoom MyMap -> Task (Maybe (Task (Maybe String)))
 	taskToDo (alarmLoc,detector) curActor curRoom curMap
 		=		viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
 				-|| 
@@ -213,12 +214,12 @@ where
 								 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ goto dirBlanket <+++ ")")
 								 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ goto dirPlug <+++ ")")
 								 ])) @! ()
-				>>* [OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) useExtinquisher)
-					,OnAction (Action "Use Blanket" []) 			(ifCond (mayUseBlanket detector) useBlanket)
-					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) usePlug)
-					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) smokeReport)
+				>>* [OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
+					,OnAction (Action "Use Blanket" []) 			(ifCond (mayUseBlanket detector) (return (Just useBlanket)))
+					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) (return (Just usePlug)))
+					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) (return (Just smokeReport)))
 
- 					,OnAction (Action "Need More Help" []) (always giveUp)
+ 					,OnAction (Action "I give up" []) (always (return (Just giveUp)))
 					]
 	where 
 		mayUseExtinguisher (FireDetector True) 	= curRoom.number == alarmLoc && (isMember FireExtinguisher curActor.carrying)
@@ -236,30 +237,32 @@ where
 		useExtinquisher		=		useObject alarmLoc FireExtinguisher curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-//   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
+   								>>| viewInformation "Well Done, Fire Extinguished !" [] ()
    								>>| return (Just "Fire Extinguised")
 
 		useBlanket			=		useObject alarmLoc Blanket curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-//   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
+   								>>| viewInformation "Well Done, Fire Extinguished !" [] ()
    								>>| return (Just "Fire Extinguised")
 		
 		usePlug				=		useObject alarmLoc Plug curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-//   								>>| viewInformation "Well Done, Flooding Stopped" [] ()
+   								>>| viewInformation "Well Done, Flooding Stopped !" [] ()
    								>>| return (Just "Flooding Stopped")
 
 		smokeReport			=		resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-//   								>>| viewInformation "Well Done, Reason of Smoke Detected" [] ()
+   								>>| viewInformation "Well Done, Reason of Smoke Detected !" [] ()
    								>>| return (Just "Don't smoke under a smoke detector !!")
+
+		giveUp 				=		updStatusOfActor curActor.userName Available myMap
+								>>|	return (Just "I gave up, send somebody else...")
 
 		goto []  = ", you are there"
 		goto dir = ", goto " +++ toString (hd dir)
 
-		giveUp 				=		return (Just "I need more help...")
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
