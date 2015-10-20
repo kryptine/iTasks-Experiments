@@ -147,7 +147,7 @@ where
 	selectSomeOneToHandle (number,detector)
 		=	whileUnchanged actorStatusChanged 
 				 (\_ ->		  		get myMap
-				  >>= \curMap ->  	let allActors = findAllActors curMap in
+				  >>= \curMap ->  	let allActors = [(room,actor) \\ (room,actor) <- findAllActors curMap | actor.actorStatus.occupied === Available ] in
 									enterChoice (if (isEmpty allActors) "No one available at all !" ("Who should handle: " <+++ showAlarm (number,detector))) [] allActors)
 
 	viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
@@ -176,8 +176,6 @@ where
 											 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
 											 ]) @! ()
 
-
-
 handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 = 		updStatusOfActor actor.userName Busy myMap
  >>|	addLog ("Commander " <+++ me) actor.userName (message "Start Handling ")
@@ -187,9 +185,11 @@ handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 where
 	message work = (work <+++ toString detector <+++ " in Room " <+++ alarmLoc)
 
-	handleWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe a)) -> Task () | iTask a
+	handleWhileWalking :: MyActor String String (MyActor MyRoom MyMap -> Task (Maybe (Task (Maybe String)))) -> Task () 
 	handleWhileWalking actor title priority task 
-		=					(((actor.userName,title)  @: moveAround mkRoom actor (Just task) myMap) 
+		=					(((actor.userName,title)  @:( 				moveAround mkRoom actor (Just task) myMap 
+							 							>>= \mbTask ->  fromJust mbTask))
+
 							-||-
 							(viewInformation ("Cancel task \"" <+++ title <+++ "\"") [] () @! Nothing))
 		>>= \mba ->	if (isNothing mba)
@@ -197,7 +197,8 @@ where
 							(viewInformation ("Task " <+++ title <+++ " terminated normally, returning:") [] (fromJust mba) @! ())
 		>>|			return ()
 	
-	taskToDo :: (RoomNumber,Detector) MyActor MyRoom MyMap -> Task (Maybe String)
+
+	taskToDo :: (RoomNumber,Detector) MyActor MyRoom MyMap -> Task (Maybe (Task (Maybe String)))
 	taskToDo (alarmLoc,detector) curActor curRoom curMap
 		=		viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
 				-|| 
@@ -213,12 +214,12 @@ where
 								 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ goto dirBlanket <+++ ")")
 								 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ goto dirPlug <+++ ")")
 								 ])) @! ()
-				>>* [OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) useExtinquisher)
-					,OnAction (Action "Use Blanket" []) 			(ifCond (mayUseBlanket detector) useBlanket)
-					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) usePlug)
-					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) smokeReport)
+				>>* [OnAction (Action "Use Fire Extinguisher" []) 	(ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
+					,OnAction (Action "Use Blanket" []) 			(ifCond (mayUseBlanket detector) (return (Just useBlanket)))
+					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) (return (Just usePlug)))
+					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) (return (Just smokeReport)))
 
- 					,OnAction (Action "Need More Help" []) (always succesful)
+ 					,OnAction (Action "I give up" []) (always (return (Just giveUp)))
 					]
 	where 
 		mayUseExtinguisher (FireDetector True) 	= curRoom.number == alarmLoc && (isMember FireExtinguisher curActor.carrying)
@@ -236,36 +237,36 @@ where
 		useExtinquisher		=		useObject alarmLoc FireExtinguisher curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
+   								>>| viewInformation "Well Done, Fire Extinguished !" [] ()
    								>>| return (Just "Fire Extinguised")
 
 		useBlanket			=		useObject alarmLoc Blanket curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
+   								>>| viewInformation "Well Done, Fire Extinguished !" [] ()
    								>>| return (Just "Fire Extinguised")
 		
 		usePlug				=		useObject alarmLoc Plug curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Flooding Stopped" [] ()
+   								>>| viewInformation "Well Done, Flooding Stopped !" [] ()
    								>>| return (Just "Flooding Stopped")
 
 		smokeReport			=		resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Reason of Smoke Detected" [] ()
+   								>>| viewInformation "Well Done, Reason of Smoke Detected !" [] ()
    								>>| return (Just "Don't smoke under a smoke detector !!")
+
+		giveUp 				=		updStatusOfActor curActor.userName Available myMap
+								>>|	return (Just "I gave up, send somebody else...")
 
 		goto []  = ", you are there"
 		goto dir = ", goto " +++ toString (hd dir)
 
-		succesful 
-			=		updRoomStatus alarmLoc (updDetector resetDetector detector) myMap
-			>>|		return (Just "I need more help...")
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
-	=		updActorStatus user (\st -> {st & occupied = Busy}) smap
+	=		updActorStatus user (\st -> {st & occupied = availability}) smap
  	>>|		upd toggle actorStatusChanged
  	>>|		addLog user "" ("Has become " <+++ availability)
 
@@ -273,7 +274,7 @@ resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task ()
 resetAlarm (alarmLoc,detector) actor smap
 	= 		updRoomStatus alarmLoc (updDetector resetDetector detector) smap
 	>>|		upd toggle alarmChanged		
-	>>|		addLog actor.userName alarmLoc  ("Resets " <+++ detector) 
+	>>|		addLog actor.userName alarmLoc  ("Resets " <+++ detector <+++ " to False.") 
 
 // simulate via auto stuf
 
@@ -284,7 +285,7 @@ autoHandleAlarm commander user (alarmLoc,detector)
 startSimulation :: User User (RoomNumber,Detector) -> Task Bool
 startSimulation commander user (alarmLoc,detector) 
 	=				updStatusOfActor user Busy myMap 
- 	>>|				addLog commander user ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
+ 	>>|				addLog ("Commander " <+++ commander) user ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
  	>>|				get myMap 
 	>>= \curMap ->	let (myLoc,curActor) 		= fromJust (findUser user curMap) 						
 						(mbObjectLoc,mbObject)  = findClosestObject myLoc (alarmLoc,detector) curMap		
