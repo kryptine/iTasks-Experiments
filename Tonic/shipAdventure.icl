@@ -218,7 +218,7 @@ where
 					,OnAction (Action "Use Plug" []) 				(ifCond (mayUsePlug detector) usePlug)
 					,OnAction (Action "Smoke Investigated" []) 		(ifCond (mayDetectedSmoke detector) smokeReport)
 
- 					,OnAction (Action "Need More Help" []) (always succesful)
+ 					,OnAction (Action "Need More Help" []) (always giveUp)
 					]
 	where 
 		mayUseExtinguisher (FireDetector True) 	= curRoom.number == alarmLoc && (isMember FireExtinguisher curActor.carrying)
@@ -236,32 +236,30 @@ where
 		useExtinquisher		=		useObject alarmLoc FireExtinguisher curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
+//   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
    								>>| return (Just "Fire Extinguised")
 
 		useBlanket			=		useObject alarmLoc Blanket curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
+//   								>>| viewInformation "Well Done, Fire Extinguished" [] ()
    								>>| return (Just "Fire Extinguised")
 		
 		usePlug				=		useObject alarmLoc Plug curActor myMap
    								>>|	resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Flooding Stopped" [] ()
+//   								>>| viewInformation "Well Done, Flooding Stopped" [] ()
    								>>| return (Just "Flooding Stopped")
 
 		smokeReport			=		resetAlarm (alarmLoc,detector) actor myMap
    								>>| updStatusOfActor curActor.userName Available myMap
-   								>>| viewInformation "Well Done, Reason of Smoke Detected" [] ()
+//   								>>| viewInformation "Well Done, Reason of Smoke Detected" [] ()
    								>>| return (Just "Don't smoke under a smoke detector !!")
 
 		goto []  = ", you are there"
 		goto dir = ", goto " +++ toString (hd dir)
 
-		succesful 
-			=		updRoomStatus alarmLoc (updDetector resetDetector detector) myMap
-			>>|		return (Just "I need more help...")
+		giveUp 				=		return (Just "I need more help...")
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
@@ -273,7 +271,7 @@ resetAlarm :: (RoomNumber,Detector) MyActor (Shared MyMap) -> Task ()
 resetAlarm (alarmLoc,detector) actor smap
 	= 		updRoomStatus alarmLoc (updDetector resetDetector detector) smap
 	>>|		upd toggle alarmChanged		
-	>>|		addLog actor.userName alarmLoc  ("Resets " <+++ detector) 
+	>>|		addLog actor.userName alarmLoc  ("Resets " <+++ detector <+++ " to False.") 
 
 // simulate via auto stuf
 

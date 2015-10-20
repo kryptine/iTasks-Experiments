@@ -111,7 +111,7 @@ moveOneStep roomViz actor mbtask smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
-					(	 (		( roomViz room //    viewInformation ("Hello " <+++ actor.userName <+++ ", you are in room " <+++ room.number) [] room
+					(	 (		( roomViz room 
 								 >>* (   exitActions room nactor		
                                       ++ inventoryActions room nactor 
 								      ++ carryActions room nactor		
