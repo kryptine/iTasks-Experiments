@@ -572,14 +572,14 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
 
 onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
 onClick clck _ (m, _) = (m, clck)
-
+import StdDebug
 mkUpDown :: !RoomNumber !(!Exit, Locked) -> Image (!MyMap, !MapClick)
 mkUpDown n (e=:(Up _), l)
-  = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
+  = trace_n ("n = " +++ toString n +++ " l = " +++ toString l) polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
       <@< { onclick = onClick (ToggleDoor n e), local = False }
 mkUpDown n (e=:(Down _), l)
-  = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
+  = trace_n ("n = " +++ toString n +++ " l = " +++ toString l) polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
       <@< { onclick = onClick (ToggleDoor n e), local = False }
 
