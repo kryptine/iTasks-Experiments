@@ -147,7 +147,7 @@ where
 	selectSomeOneToHandle (number,detector)
 		=	whileUnchanged actorStatusChanged 
 				 (\_ ->		  		get myMap
-				  >>= \curMap ->  	let allActors = findAllActors curMap in
+				  >>= \curMap ->  	let allActors = [(room,actor) \\ (room,actor) <- findAllActors curMap | actor.actorStatus.occupied === Available ] in
 									enterChoice (if (isEmpty allActors) "No one available at all !" ("Who should handle: " <+++ showAlarm (number,detector))) [] allActors)
 
 	viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
@@ -265,7 +265,7 @@ where
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
-	=		updActorStatus user (\st -> {st & occupied = Busy}) smap
+	=		updActorStatus user (\st -> {st & occupied = availability}) smap
  	>>|		upd toggle actorStatusChanged
  	>>|		addLog user "" ("Has become " <+++ availability)
 
@@ -284,7 +284,7 @@ autoHandleAlarm commander user (alarmLoc,detector)
 startSimulation :: User User (RoomNumber,Detector) -> Task Bool
 startSimulation commander user (alarmLoc,detector) 
 	=				updStatusOfActor user Busy myMap 
- 	>>|				addLog commander user ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
+ 	>>|				addLog ("Commander " <+++ commander) user ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
  	>>|				get myMap 
 	>>= \curMap ->	let (myLoc,curActor) 		= fromJust (findUser user curMap) 						
 						(mbObjectLoc,mbObject)  = findClosestObject myLoc (alarmLoc,detector) curMap		
