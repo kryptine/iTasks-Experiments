@@ -214,10 +214,15 @@ unlockExit roomNo exit smap = updExit roomNo exit smap (const False)
 
 updExit :: RoomNumber Exit (Shared (MAP r o a)) (Locked -> Locked) -> Task () | iTask r & iTask o & iTask a & Eq o
 updExit roomNo exit smap lockf
-  = upd (map (map (map updRoom))) smap @! ()
+  = upd (map (map (map (updRoom (inverseExit exit))))) smap @! ()
   where
-  updRoom r = {r & exits = [if (interestingExit r e) (e, lockf l) (e, l)  \\ (e, l) <- r.exits] }
-  interestingExit r e = (r.number == roomNo && e == exit) || (r.number == fromExit exit && e == inverseExit exit)
+  updRoom :: !Exit !(Room r o a) -> Room r o a | iTask r & iTask o & iTask a & Eq o
+  updRoom ie r = {r & exits = [if (interestingExit ie r e) (e, lockf l) (e, l)  \\ (e, l) <- r.exits] }
+
+  interestingExit :: !Exit !(Room r o a) !Exit -> Bool
+  interestingExit ie r e = (r.number == roomNo && e == exit) || (r.number == fromExit exit && e == ie)
+
+  inverseExit :: !Exit -> Exit
   inverseExit (North _) = South roomNo
   inverseExit (South _) = North roomNo
   inverseExit (East _)  = West roomNo
