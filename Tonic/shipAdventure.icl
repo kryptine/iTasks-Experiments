@@ -439,7 +439,7 @@ setRoomDetectors :: Task ()
 setRoomDetectors 
 	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
       >>* [OnValue (\tv -> case tv of
-                             Value (ToggleAlarm selRoom d) _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myMap >>| setRoomDetectors)
+                             Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
@@ -545,8 +545,8 @@ mapImage mngmnt (m, _) tsrc
                       , (mkActorBadgeBackground NotAvailable, "Unavailable person")
                       , (mkActorBadgeBackground Busy, "Busy person")
                       , (mkInventoryBadgeBackground, "Room inventory")
-                      , (mkUpDown 0 (Up 0, False), "Staircase up")
-                      , (mkUpDown 0 (Down 0, False), "Staircase down")
+                      , (mkUpDown (Up 0, False), "Staircase up")
+                      , (mkUpDown (Down 0, False), "Staircase down")
                       ]
   #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
@@ -596,7 +596,7 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
                         (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
-  #! upDownExits    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o (mkUpDown number)) (upEs ++ downEs)) Nothing
+  #! upDownExits    = above (repeat AtMiddleX) [] (map (\x=:(e, _) -> scale multiplier multiplier (mkUpDown x) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
   #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numNorth (AtLeft, AtTop)    northEs
   #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numSouth (AtLeft, AtBottom) southEs
   #! (rExitAligns,   rExitOffsets,   rExitImgs)   = mkAsOsIs multiplier (\sp -> (zero, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numEast  (AtRight, AtTop)   eastEs
@@ -633,15 +633,13 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
 onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
 onClick clck _ (m, _) = (m, clck)
 import StdDebug
-mkUpDown :: !RoomNumber !(!Exit, Locked) -> Image (!MyMap, !MapClick)
-mkUpDown n (e=:(Up _), l)
-  = trace_n ("n = " +++ toString n +++ " l = " +++ toString l) polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
+mkUpDown :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
+mkUpDown (e=:(Up _), l)
+  = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
-      <@< { onclick = onClick (ToggleDoor n e), local = False }
-mkUpDown n (e=:(Down _), l)
-  = trace_n ("n = " +++ toString n +++ " l = " +++ toString l) polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
+mkUpDown (e=:(Down _), l)
+  = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
-      <@< { onclick = onClick (ToggleDoor n e), local = False }
 
 mkStatusBadge :: Int !Bool !Real !Detector ![Image (!MyMap, !MapClick)] -> [Image (!MyMap, !MapClick)]
 mkStatusBadge roomNo mngmnt badgeMult d acc
