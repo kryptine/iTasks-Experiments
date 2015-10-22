@@ -486,7 +486,7 @@ where
                   , [room04, room05, room06]
                   , [room07, room08]
                   ]
-	back0		= {name = "back 0",    number = 1,  roomStatus = detectors, inventory = [], exits = [(South 2, False), (South 3, False), (South 4, False)], actors = []}
+	back0		= {name = "back 0",     number = 1,  roomStatus = detectors, inventory = [], exits = [(South 2, False), (South 3, False), (South 4, False)], actors = []}
 	room01		= {name = "room 0.1",   number = 2,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False), (Down 13, False)], actors = []}			
 	room02		= {name = "room 0.2",   number = 3,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False)], actors = []}			
 	room03		= {name = "room 0.3",   number = 4,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 1, False), (South 5, False)], actors = []}
@@ -505,7 +505,7 @@ where
                   , [room14, room15, room16]
                   , [room17, room18]
                   ]
-	back1		= {name = "back 1",    number = 12, roomStatus = detectors, inventory = [], exits = [(South 13, False), (South 14, False), (South 15, False)], actors = []}
+	back1		= {name = "back 1",     number = 12, roomStatus = detectors, inventory = [], exits = [(South 13, False), (South 14, False), (South 15, False)], actors = []}
 	room11		= {name = "room 1.1",   number = 13, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False), (Up 2, False)], actors = []}
 	room12		= {name = "room 1.2",   number = 14, roomStatus = detectors, inventory = [], exits = [(North 12, False), (South 16, False), (East 15, False)], actors = []}
 	room13		= {name = "room 1.3",   number = 15, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 12, False), (South 16, False), (West 14, False)], actors = []}
@@ -551,9 +551,6 @@ mapImage mngmnt (m, _) tsrc
   #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
-
-floorWidth :: !MyFloor -> Int
-floorWidth floor = foldr (\xs -> max (length xs)) 0 floor
 
 floorImage :: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (!MyMap, MapClick), !*TagSource)
 floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
@@ -632,7 +629,7 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
 
 onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
 onClick clck _ (m, _) = (m, clck)
-import StdDebug
+
 mkUpDown :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
 mkUpDown (e=:(Up _), l)
   = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
