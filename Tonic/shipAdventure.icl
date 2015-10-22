@@ -39,7 +39,7 @@ import adventure
 					, intendedFor	:: String
 					, when			:: DateTime
 					, about			:: String
-					}
+ 					}
 
 derive class iTask Detector, Object, ActorStatus, Availability, Priority, Log, MapClick
 
@@ -100,6 +100,7 @@ Start world
 myTasks :: [Workflow]
 myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
 			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions			
+			,	workflow "alter script" "define your own simulation"								(updateSharedInformation "my script" [] myScript)
 		 	]
 
 // initial task to place an actor on the map
@@ -131,6 +132,7 @@ giveInstructions
 							\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
 							>>* 					[ OnAction ActionByHand  	(hasValue (\prio -> handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),prio)))
 	       											, OnAction ActionSimulated  (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc,detector) @! ()))
+	       											, OnAction ActionScript  (hasValue (\prio -> autoHandleWithScript (me,(alarmLoc,detector),(actorLoc,actor),prio) @! ()))
 													, OnAction ActionCancel (always (return ()))
 	       											]
 	       				)
@@ -138,6 +140,7 @@ giveInstructions
 where
 	ActionByHand 		= Action "By Hand"  []
 	ActionSimulated 	= Action "Simulate" []	
+	ActionScript 		= Action "Simulate with Script" []	
 
 	selectAlarm alarms
 		=	whileUnchanged alarmChanged 
@@ -358,6 +361,63 @@ showAlarms
 showAlarm (alarmLoc,detector)
 	= "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ " !!! "
 
+// scripted simulation
+
+:: Target		= 	Room Int
+				|	Nearest Object
+				|	TargetRoom
+:: Script		=	MoveTo Target
+				|	Take Object
+				|	Drop Object
+				|	Use Object
+				|	ReSetTargetDetector 
+				|	If Condition Script Script
+:: Condition	=	InRoom MyRoom
+				|	ObjectInRoom Object
+				|	CarriesObject Object
+				|	ExistObject Object
+				|	And Condition Condition
+				|	Or Condition Condition
+
+derive class iTask Target, Script, Condition
+
+myScript :: Shared [Script]
+myScript = sharedStore "myScript" []
+
+autoHandleWithScript :: (User,(RoomNumber,Detector),(RoomNumber,MyActor),Priority) -> Task ()
+autoHandleWithScript  (commander,(alarmLoc,detector),(actorLoc,actor),prio)
+	= 				get myScript 
+	>>= \script ->	appendTopLevelTaskPrioFor actor.userName ("Auto script " <+++ toString detector <+++ " in room " <+++ alarmLoc) "High" True 
+ 					(		updStatusOfActor actor.userName  Busy myMap 
+ 					 >>|	perform script (actorLoc,actor)
+ 					 >>|	updStatusOfActor actor.userName  Available myMap 
+ 					 ) @! ()
+
+where
+	perform :: [Script] (RoomNumber,MyActor) -> Task Bool
+	perform [] (actorLoc,actor)								
+		=	return True	
+	perform [MoveTo target:next] (actorLoc,actor)	
+		=					get myMap
+		>>= \curMap ->		return (whereIs target actorLoc curMap)
+		>>= \newLoc ->		autoMove actorLoc newLoc shipShortestPath actor myMap
+		>>| 				perform next (newLoc,actor) 
+	perform [Take object:next] (actorLoc,actor)	
+		=					pickupObject actorLoc object actor myMap
+		>>|					perform next (actorLoc,actor)
+	perform [Drop object:next] (actorLoc,actor)	
+		=					dropDownObject actorLoc object actor myMap
+		>>|					perform next (actorLoc,actor)
+	perform [Use object:next] (actorLoc,actor)	
+		=					useObject actorLoc object actor myMap
+		>>|					perform next (actorLoc,actor)
+	perform [ReSetTargetDetector:next] (actorLoc,actor)	
+		=					resetAlarm (alarmLoc,detector) actor myMap
+		>>|					perform next (actorLoc,actor)
+
+	whereIs (Room nr) actorLoc curMap			= nr
+	whereIs (Nearest object) actorLoc curMap	= let (_,(objectLoc,_,_)) = pathToClosestObject object actorLoc curMap in objectLoc
+	whereIs TargetRoom actorLoc curMap		= alarmLoc
 
 // general map viewing
 
