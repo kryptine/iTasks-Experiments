@@ -171,12 +171,13 @@ autoMove thisRoom target pathFun actor smap
 				 		path	= pathFun thisRoom target curMap
 					in	if (isEmpty path) (return False)
 						(		let nextRoom = fromExit (hd path)
-								in			move room.number nextRoom nactor smap
+								in			waitForTimer  {Time | hour = 0, min = 0, sec = delay}
+									>>|		move room.number nextRoom nactor smap
 					 				>>|		waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
 					 				>>|		autoMove nextRoom target pathFun actor smap
 						)
 		
-delay = 2
+delay = 1
 
 // room updating
 
@@ -246,7 +247,6 @@ getRoomStatus roomNumber smap
 					[] -> return Nothing
 					status -> return (Just (hd status))
 					 
-
 updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 updRoomStatus roomNumber upd smap = updateRoom roomNumber (\room -> {room & roomStatus = upd room.roomStatus}) smap
 
@@ -296,6 +296,10 @@ findAllObjects :: (MAP r o a) -> [(RoomNumber,o)]
 findAllObjects map =	[ (room.number,object)
 						\\ floor <- map, layer <- floor, room <- layer, object <- room.inventory
 						]
+
+findObjectsInRoom :: RoomNumber (MAP r o a) -> Maybe o
+findObjectsInRoom roomNumber map = let listOfo = [o \\ (i,o) <- findAllObjects map | i == roomNumber] in 
+									if (isEmpty listOfo) Nothing (Just (hd listOfo))
 
 allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
 allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
