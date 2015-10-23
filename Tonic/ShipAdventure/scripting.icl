@@ -29,18 +29,20 @@ myScript = sharedStore "myScript" []
 mkScript :: Task [Script]
 mkScript = updateSharedInformation "my script" [] myScript
 
-interperScript ::  (RoomNumber,Detector) (RoomNumber,MyActor) [Script] -> Task Bool
-interperScript (targetRoom,detector) (actorLoc,actor) script
-	= perform script (actorLoc,actor)
+interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
+interperScript (targetRoom,detector) user script
+	= 						get myMap
+	>>= \map			->	perform script (fromJust (findUser user map))
 where
 	perform :: [Script] (RoomNumber,MyActor) -> Task Bool
 	perform [] (actorLoc,actor)								
 		=	return True	
+
 	perform [MoveTo target:next] (actorLoc,actor)	
 		=					get myMap
-		>>= \curMap ->		return (whereIs target actorLoc curMap)
-		>>= \newLoc ->		autoMove actorLoc newLoc shipShortestPath actor myMap
-		>>| 				perform next (newLoc,actor) 
+		>>= \curMap ->		let newLoc  = whereIs target actorLoc curMap 
+							in	autoMove actorLoc newLoc shipShortestPath actor myMap
+								>>| perform next (newLoc,actor) 
 	perform [Take object:next] (actorLoc,actor)	
 		=					pickupObject actorLoc object actor myMap
 		>>|					perform next (actorLoc,actor)

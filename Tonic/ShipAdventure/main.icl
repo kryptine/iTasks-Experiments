@@ -214,7 +214,7 @@ autoHandleWithScript  (commander,(alarmLoc,detector),(actorLoc,actor),prio)
 	>>= \script ->	appendTopLevelTaskPrioFor actor.userName ("Auto script " <+++ toString detector <+++ " in room " <+++ alarmLoc) "High" True 
  					(		updStatusOfActor actor.userName  Busy myMap 
  						>>|	addLog ("Commander " <+++ commander) actor.userName ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
- 						>>|	interperScript (alarmLoc,detector) (actorLoc,actor) script // perform script (actorLoc,actor)
+ 						>>|	interperScript (alarmLoc,detector) actor.userName script // perform script (actorLoc,actor)
  					 	>>|	updStatusOfActor actor.userName  Available myMap 
  						>>| addLog actor.userName commander  ("Simulation Handling " <+++ toString detector <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
  					 ) @! ()

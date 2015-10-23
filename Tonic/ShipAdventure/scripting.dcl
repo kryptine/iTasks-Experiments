@@ -28,5 +28,5 @@ myScript :: Shared [Script]
 
 mkScript :: Task [Script]
 
-interperScript ::  (RoomNumber,Detector) (RoomNumber,MyActor) [Script] -> Task Bool
+interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
 
