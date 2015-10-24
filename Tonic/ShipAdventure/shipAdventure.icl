@@ -19,10 +19,13 @@ where
 	row x =  [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
 
 myTasks :: [Workflow]
-myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  (get currentUser >>= \me -> actorWithInstructions me)
-			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions			
+myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  currentUserWalkAround
+			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions
 			,	workflow "alter script" "define your own simulation"								mkScript
 		 	]
+
+currentUserWalkAround :: Task ()
+currentUserWalkAround = get currentUser >>= actorWithInstructions
 
 // initial task to place an actor on the map
 // one can only assign tasks to actors on the map
