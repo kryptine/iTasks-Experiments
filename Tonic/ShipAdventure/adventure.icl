@@ -174,7 +174,7 @@ autoMove thisRoom target pathFun actor smap
 								in			waitForTimer  {Time | hour = 0, min = 0, sec = delay}
 									>>|		move room.number nextRoom nactor smap
 					 				>>|		waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
-					 				>>|		autoMove nextRoom target pathFun actor smap
+					 				>>|		autoMove nextRoom target pathFun nactor smap
 						)
 		
 delay = 1
