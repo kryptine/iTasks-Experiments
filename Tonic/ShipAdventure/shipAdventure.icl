@@ -15,14 +15,14 @@ import shipType, logging, scripting
 
 mkTable :: [String]  ![a] -> Table | gText{|*|} a
 mkTable	headers a = Table headers (map row a) Nothing
-where
-	row x =  [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
+  where
+  row x = [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
 
 myTasks :: [Workflow]
-myTasks = 	[	workflow "walk around"	"enter map, walk around, follow instructions of commander"  currentUserWalkAround
-			,	workflow "commander"	"give instructions to crew members on the map" 				giveInstructions
-			,	workflow "alter script" "define your own simulation"								mkScript
-		 	]
+myTasks = [ workflow "walk around"  "enter map, walk around, follow instructions of commander" currentUserWalkAround
+          , workflow "commander"    "give instructions to crew members on the map"             giveInstructions
+          , workflow "alter script" "define your own simulation"                               mkScript
+          ]
 
 currentUserWalkAround :: Task ()
 currentUserWalkAround = get currentUser >>= actorWithInstructions
@@ -30,15 +30,23 @@ currentUserWalkAround = get currentUser >>= actorWithInstructions
 // initial task to place an actor on the map
 // one can only assign tasks to actors on the map
 
-actorWithInstructions :: User  -> Task ()
-actorWithInstructions user 
-	=			enterInformation "Which room do you want to start in?" []
-	>>= \loc ->	addLog user "" ("Entered the building starting in room " <+++ loc)
- 	>>|			addActorToMap mkRoom (newActor user) loc myMap
-where
-	newActor user 			
-		= {userName = user, carrying = [], actorStatus = {occupied = Available}}
- 
+actorWithInstructions :: User -> Task ()
+actorWithInstructions user
+  # actor = newActor user
+  =           get myMap
+  >>= \map -> case (findUser actor.userName map) of
+                Nothing
+                  =           enterInformation "Which room do you want to start in?" []
+                  >>= \loc -> addLog user "" ("Entered the building starting in room " <+++ loc)
+                  >>|         addActorToMap mkRoom actor loc myMap
+                Just (_, me) = moveAround mkRoom me noTask myMap @! ()
+  where
+  newActor user
+    = {userName = user, carrying = [], actorStatus = {occupied = Available}}
+
+  noTask :: Maybe (ActorTask r o a ()) | iTask r & iTask o & iTask a & Eq o
+  noTask = Nothing
+
 // given the alarms one has to decide which tasks to assign to handle the situation
 
 giveInstructions :: Task ()
@@ -50,8 +58,8 @@ giveInstructions =
              \(alarmLoc, detector) -> selectSomeOneToHandle (alarmLoc, detector)
              >&>                      withSelection (viewInformation () [] "No Crew Member Selected")
              \(actorLoc, actor) ->    viewRelativeStatus (actorLoc, actor) (alarmLoc, detector)
-             >&>                      withSelection (viewInformation () [] "No status")
-             \_ ->                    updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
+                                      ||-
+                                      updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
              >>* [ OnAction ActionByHand    (hasValue (\prio -> handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), prio)))
                  , OnAction ActionSimulated (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc, detector) @! ()))
                  , OnAction ActionScript    (hasValue (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
@@ -64,7 +72,7 @@ where
     ActionSimulated = Action "Simulate" []
     ActionScript    = Action "Simulate with Script" []
 
-    showAlarm (alarmLoc, detector) = "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
+    showAlarm (alarmLoc, detector) = "Room " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
 
     selectSomeOneToHandle :: (RoomNumber, Detector) -> Task (Int, MyActor)
     selectSomeOneToHandle (number,detector)
