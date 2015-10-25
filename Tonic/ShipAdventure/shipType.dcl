@@ -76,11 +76,3 @@ mapImage 	:: !Bool !(!MyMap, MapClick) !*TagSource -> Image (a, MapClick)
 floorImage 	:: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 roomImage 	:: !Bool !(Maybe MyRoom) !*TagSource -> Image (a, MapClick)
 
-// the following shared stores are a temp fix, instead lenses should be used on myMap (did not have time for that)
-
-alarmChanged 		:: Shared Bool			// to notify that one of the alarms has changed, should be turned into a lens
-actorStatusChanged 	:: Shared Bool			// to notify that the status of one the actors has changed, should be tuned into a lens 
-
-signalActorStatusChange	:: Task ()
-
-

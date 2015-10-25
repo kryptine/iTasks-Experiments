@@ -34,7 +34,6 @@ actorWithInstructions :: User  -> Task ()
 actorWithInstructions user 
 	=			enterInformation "Which room do you want to start in?" []
 	>>= \loc ->	addLog user "" ("Entered the building starting in room " <+++ loc)
- 	>>|			signalActorStatusChange 
  	>>|			addActorToMap mkRoom (newActor user) loc myMap
 where
 	newActor user 			
@@ -191,7 +190,6 @@ where
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
 	=		updActorStatus user (\st -> {st & occupied = availability}) smap
- 	>>|		signalActorStatusChange
  	>>|		addLog user "" ("Has become " <+++ availability)
 
 

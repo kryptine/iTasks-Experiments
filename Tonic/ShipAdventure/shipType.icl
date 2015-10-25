@@ -51,15 +51,6 @@ where
                            , detector <- detectors
                            | isHigh detector]
 
-alarmChanged :: Shared Bool					// to notify that one of the alarms has changed, should be turned into a lens
-alarmChanged  = sharedStore "alarms" False
-
-actorStatusChanged :: Shared Bool			 // to notify that the status of one the actors has changed, should be tuned into a lens 
-actorStatusChanged = sharedStore "actors" False
-
-signalActorStatusChange :: Task ()
-signalActorStatusChange = upd (\b -> not b) actorStatusChanged @! ()
-
 // detectors setting
 
 // setting and resetting of the detection systems
@@ -78,7 +69,6 @@ from logging import addLog
 setAlarm :: User (RoomNumber,Detector) Bool (Shared MyMap) -> Task ()
 setAlarm user (alarmLoc,detector) bool smap
 	= 		updRoomStatus alarmLoc (updDetector (if bool setDetector resetDetector) detector) smap
-	>>|		upd (\b -> not b) alarmChanged		
 	>>|		addLog user alarmLoc  ("Resets " <+++ detector <+++ " to False.") 
 
 //
