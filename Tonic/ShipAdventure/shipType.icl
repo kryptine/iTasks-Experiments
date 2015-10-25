@@ -34,7 +34,7 @@ where toString (FireDetector _)  = "Fire Alarm"
 
 // shared stores:
 
-myMap  :: Shared MyMap						// map of the ship
+myMap :: RWShared () MyMap MyMap // map of the ship
 myMap = sharedStore "myBuilding" myShip
 
 allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]

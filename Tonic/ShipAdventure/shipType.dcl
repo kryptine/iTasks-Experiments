@@ -35,7 +35,7 @@ instance 	toString 	Detector
 	
 // shared stores:
 
-myMap              :: Shared MyMap // map of the ship
+myMap              :: RWShared () MyMap MyMap // map of the ship
 
 allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
 

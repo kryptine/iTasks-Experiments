@@ -61,41 +61,44 @@ giveInstructions =
             )
   )
 where
-	ActionByHand 		= Action "By Hand"  []
-	ActionSimulated 	= Action "Simulate" []	
-	ActionScript 		= Action "Simulate with Script" []	
+    ActionByHand 		= Action "By Hand"  []
+    ActionSimulated 	= Action "Simulate" []
+    ActionScript 		= Action "Simulate with Script" []
 
     showAlarm (alarmLoc,detector) = "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
 
-	selectSomeOneToHandle :: (RoomNumber,Detector) -> Task (Int,MyActor)
-	selectSomeOneToHandle (number,detector)
-      = enterChoiceWithShared ("Who should handle: " <+++ showAlarm (number,detector)) [] allAvailableActors
+    selectSomeOneToHandle :: (RoomNumber, Detector) -> Task (Int, MyActor)
+    selectSomeOneToHandle (number,detector)
+      = enterChoiceWithShared ("Who should handle: " <+++ showAlarm (number, detector)) [] allAvailableActors
 
-	viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
-	viewRelativeStatus (actorLoc,actor) (alarmLoc,FireDetector _)
-		= whileUnchanged myMap
-				\curMap -> 	let (nrExt, (extLoc, distExt, _))               = pathToClosestObject FireExtinguisher actorLoc curMap
-							    (nrBlankets, (blanketLoc, distBlankets, _)) = pathToClosestObject Blanket          actorLoc curMap
-							in  viewInformation "" []
-								  (mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-								     [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
-								     , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
-								     , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
-								     ]) @! ()
-	viewRelativeStatus (actorLoc,actor) (alarmLoc,SmokeDetector _) 
-		= whileUnchanged myMap 
-				\curMap ->	viewInformation "" [] 
-									(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-											 [ ("The Smoke Detected in Room " <+++ alarmLoc, length (shipShortestPath actorLoc alarmLoc curMap))
-											 ]) @! ()
-	viewRelativeStatus (actorLoc,actor) (alarmLoc,FloodDetector _)  
-		= whileUnchanged myMap 
-				\curMap -> 	let	(nrPlugs,(plugLoc,distPlugs,_)) 		= pathToClosestObject Plug actorLoc curMap
-							in	viewInformation "" [] 
-									(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-											 [ ("The Flood Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
-											 , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
-											 ]) @! ()
+    viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
+    viewRelativeStatus (actorLoc, actor) (alarmLoc, FireDetector _)
+        = viewSharedInformation () [ViewWith mkView] myMap @! ()
+        where
+        mkView curMap
+          # (nrExt, (extLoc, distExt, _))               = pathToClosestObject FireExtinguisher actorLoc curMap
+          # (nrBlankets, (blanketLoc, distBlankets, _)) = pathToClosestObject Blanket          actorLoc curMap
+          = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+                    [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+                    , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
+                    , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
+                    ]
+    viewRelativeStatus (actorLoc, actor) (alarmLoc, SmokeDetector _)
+        = viewSharedInformation () [ViewWith mkView] myMap @! ()
+        where
+        mkView curMap
+          = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+                    [ ("The Smoke Detected in Room " <+++ alarmLoc, length (shipShortestPath actorLoc alarmLoc curMap))
+                    ]
+    viewRelativeStatus (actorLoc, actor) (alarmLoc, FloodDetector _)
+        = viewSharedInformation () [ViewWith mkView] myMap @! ()
+        where
+        mkView curMap
+          # (nrPlugs, (plugLoc, distPlugs, _)) = pathToClosestObject Plug actorLoc curMap
+          = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+                    [ ("The Flood Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+                    , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
+                    ]
 
 handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
 = 		updStatusOfActor actor.userName Busy myMap
