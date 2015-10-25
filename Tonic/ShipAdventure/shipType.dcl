@@ -72,9 +72,9 @@ findClosestObject :: RoomNumber (RoomNumber,Detector) MyMap -> (Maybe RoomNumber
 showMap 			:: Task MapClick
 setRoomDetectors 	:: Task ()
 
-mapImage 	:: !Bool !(!MyMap, MapClick) !*TagSource -> Image (!MyMap, MapClick)
-floorImage 	:: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (!MyMap, MapClick), !*TagSource)
-roomImage 	:: !Bool !(Maybe MyRoom) !*TagSource -> Image (!MyMap, !MapClick)
+mapImage 	:: !Bool !(!MyMap, MapClick) !*TagSource -> Image (a, MapClick)
+floorImage 	:: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+roomImage 	:: !Bool !(Maybe MyRoom) !*TagSource -> Image (a, MapClick)
 
 // the following shared stores are a temp fix, instead lenses should be used on myMap (did not have time for that)
 

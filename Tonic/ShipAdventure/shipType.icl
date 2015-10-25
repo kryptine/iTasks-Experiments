@@ -130,19 +130,13 @@ pathToClosestObject kind actorLoc curMap
 													\\ (objectLoc,found) <- findAllObjects curMap | found == kind ]
 
 
-// show Room
-
-mkRoom :: MyRoom -> Task ()
-mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick @! ()
-
-
 // general map viewing
 
 showMap :: Task MapClick
 showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
             >&> withSelection (return ())
                   (\mapClick -> case mapClick of
-                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (getRoomFromMap selRoom mp)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
+                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(m, a) -> (getRoomFromMap selRoom m, a)) (\(room, _) -> roomImage True room) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
                                   _ -> return NoMapClick)
 
 
@@ -205,7 +199,7 @@ shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost star
 
 // making an image from the map ...
 
-mapImage :: !Bool !(!MyMap, MapClick) !*TagSource -> Image (!MyMap, MapClick)
+mapImage :: !Bool !(!MyMap, MapClick) !*TagSource -> Image (a, MapClick)
 mapImage mngmnt (m, _) tsrc
   #! (floors, tsrc) = mapSt (floorImage mngmnt) (zip2 m (reverse [0..length m])) tsrc
   #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
@@ -223,13 +217,13 @@ mapImage mngmnt (m, _) tsrc
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (!MyMap, MapClick), !*TagSource)
+floorImage :: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
   #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
   = (floor, tsrc)
   where
-  f :: ![MyRoom] !*TagSource -> *(!Image (!MyMap, MapClick), !*TagSource)
+  f :: ![MyRoom] !*TagSource -> *(!Image (a, MapClick), !*TagSource)
   f rooms tsrc
     #! (rooms`, tsrc) = mapSt (roomImage` mngmnt False) rooms tsrc
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
@@ -239,11 +233,11 @@ exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !Bool !(Maybe MyRoom) !*TagSource -> Image (!MyMap, !MapClick)
+roomImage :: !Bool !(Maybe MyRoom) !*TagSource -> Image (a, MapClick)
 roomImage zoomed (Just room) tsrc = fst (roomImage` False zoomed room tsrc)
 roomImage _ _ _                   = empty zero zero
 
-roomImage` :: !Bool !Bool !MyRoom !*TagSource -> *(!Image (!MyMap, !MapClick), !*TagSource)
+roomImage` :: !Bool !Bool !MyRoom !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
   #! numNorth       = length northEs
@@ -282,15 +276,15 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
   foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
   foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
-  mkAsOsIs :: !Real !(Span -> (!Span, !Span)) !(Image (!MyMap, !MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)]
-            -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (!MyMap, !MapClick)])
+  mkAsOsIs :: !Real !(Span -> (!Span, !Span)) !(Image (a, MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)]
+            -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (a, MapClick)])
   mkAsOsIs multiplier mkTuple doorImg bgSize num align es
     #! exitAligns  = repeatn num align
     #! exitOffsets = reverse (fst (foldr (\_ (xs, n) -> ([mkTuple (px n) : xs], n + roomDim * multiplier)) ([], (roomDim * multiplier - exitWidth) / 2.0) es))
     #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
-    mkDoor :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
+    //mkDoor :: !(!Exit, !Locked) -> Image (a, MapClick)
     mkDoor (exit, locked)
       = doorImg
           <@< { stroke = toSVGColor "black" }
@@ -298,10 +292,10 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
           <@< { fill = toSVGColor (if locked "black" "white") }
           <@< { onclick = onClick (ToggleDoor number exit), local = False }
 
-onClick :: !MapClick Int !(!MyMap, MapClick) -> (!MyMap, MapClick)
+//onClick :: !MapClick Int (a, MapClick) -> (a, MapClick)
 onClick clck _ (m, _) = (m, clck)
 
-mkUpDown :: !(!Exit, !Locked) -> Image (!MyMap, !MapClick)
+mkUpDown :: !(!Exit, !Locked) -> Image (a, MapClick)
 mkUpDown (e=:(Up _), l)
   = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
@@ -309,7 +303,7 @@ mkUpDown (e=:(Down _), l)
   = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
 
-mkStatusBadge :: Int !Bool !Real !Detector ![Image (!MyMap, !MapClick)] -> [Image (!MyMap, !MapClick)]
+mkStatusBadge :: Int !Bool !Real !Detector ![Image (a, MapClick)] -> [Image (a, MapClick)]
 mkStatusBadge roomNo mngmnt badgeMult d acc
   #! high = isHigh d
   | high || mngmnt

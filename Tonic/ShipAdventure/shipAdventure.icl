@@ -61,11 +61,11 @@ giveInstructions =
             )
   )
 where
-    ActionByHand 		= Action "By Hand"  []
-    ActionSimulated 	= Action "Simulate" []
-    ActionScript 		= Action "Simulate with Script" []
+    ActionByHand    = Action "By Hand"  []
+    ActionSimulated = Action "Simulate" []
+    ActionScript    = Action "Simulate with Script" []
 
-    showAlarm (alarmLoc,detector) = "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
+    showAlarm (alarmLoc, detector) = "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
 
     selectSomeOneToHandle :: (RoomNumber, Detector) -> Task (Int, MyActor)
     selectSomeOneToHandle (number,detector)
@@ -100,12 +100,12 @@ where
                     , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
                     ]
 
-handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),priority)
-= 		updStatusOfActor actor.userName Busy myMap
- >>|	addLog ("Commander " <+++ me) actor.userName (message "Start Handling ")
- >>| 	appendTopLevelTaskPrioFor me (message "Wait for ") "High" True 
- 			(handleWhileWalking actor (message "Handle ") (toSingleLineText priority) 
- 			 (taskToDo (alarmLoc,detector)) ) @! ()
+handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
+  =   updStatusOfActor actor.userName Busy myMap
+  >>| addLog ("Commander " <+++ me) actor.userName (message "Start Handling ")
+  >>| appendTopLevelTaskPrioFor me (message "Wait for ") "High" True
+        (handleWhileWalking actor (message "Handle ") (toSingleLineText priority)
+        (taskToDo (alarmLoc,detector)) ) @! ()
 where
 	message work = (work <+++ toString detector <+++ " in Room " <+++ alarmLoc)
 
@@ -267,10 +267,9 @@ pathToClosestObject kind actorLoc curMap
 	= (numberResources, if (numberResources == 0) (-1,-1,[]) (hd spath))
 	where
 		numberResources = length spath 
-		spath = sortBy (\(i,l1,p1) (j,l2,p2) -> i < j)   [let path = shipShortestPath actorLoc objectLoc curMap in (objectLoc, length path, path) 
+		spath = sortBy (\(i,l1,p1) (j,l2,p2) -> i < j)   [let path = shipShortestPath actorLoc objectLoc curMap in (objectLoc, length path, path)
 													\\ (objectLoc,found) <- findAllObjects curMap | found == kind ]
 
-
-mkRoom :: MyRoom -> Task ()
-mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick @! ()
+mkRoom :: (Shared MyRoom) -> Task ()
+mkRoom shroom = updateInformationWithShared "Room Status" [imageUpdate id (\(room, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (\(_, c) _ -> c)] shroom NoMapClick @! ()
 
