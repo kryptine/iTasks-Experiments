@@ -86,7 +86,7 @@ fromExit (Down  i) = i
 
 // moving around in the map
 
-addActorToMap :: ((Shared (Room r o a)) -> Task ()) (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+addActorToMap :: ((Room r o a) -> Task ()) (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 addActorToMap roomViz actor location smap
 	=			get smap
 	>>= \map -> case (findUser actor.userName map) of
@@ -101,17 +101,17 @@ where
 	noTask :: Maybe (ActorTask r o a ()) | iTask r & iTask o & iTask a & Eq o
 	noTask = Nothing
 
-moveAround :: ((Shared (Room r o a)) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
+moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 moveAround roomViz actor mbtask smap
 	= 			repeatTask (\_ -> moveOneStep roomViz actor mbtask smap) (not o isNothing) Nothing
 
-moveOneStep :: ((Shared (Room r o a)) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
+moveOneStep :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 moveOneStep roomViz actor mbtask smap
 	= whileUnchanged smap
 			(\map -> let room 	= findRoom actor map 
 						 nactor = latestActorStatus actor room
 					 in
-					(	 (		( withShared room roomViz // room 
+					(	 (		( roomViz room
 								 >>* (   exitActions room nactor		
                                       ++ inventoryActions room nactor 
 								      ++ carryActions room nactor		

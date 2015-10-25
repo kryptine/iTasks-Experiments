@@ -270,6 +270,6 @@ pathToClosestObject kind actorLoc curMap
 		spath = sortBy (\(i,l1,p1) (j,l2,p2) -> i < j)   [let path = shipShortestPath actorLoc objectLoc curMap in (objectLoc, length path, path)
 													\\ (objectLoc,found) <- findAllObjects curMap | found == kind ]
 
-mkRoom :: (Shared MyRoom) -> Task ()
-mkRoom shroom = updateInformationWithShared "Room Status" [imageUpdate id (\(room, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (\(_, c) _ -> c)] shroom NoMapClick @! ()
+mkRoom :: MyRoom -> Task ()
+mkRoom room = viewInformation "Room Status" [imageView (\(room, _) -> roomImage True (Just room)) (\_ _ -> Nothing)] (room, NoMapClick) @! ()
 
