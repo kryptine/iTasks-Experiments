@@ -37,6 +37,20 @@ where toString (FireDetector _)  = "Fire Alarm"
 myMap  :: Shared MyMap						// map of the ship
 myMap = sharedStore "myBuilding" myShip
 
+allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
+allAvailableActors
+  = toReadOnly (sdsProject (SDSLensRead readActors) SDSNoWrite myMap)
+where
+    readActors curMap = Ok [(room,actor) \\ (room,actor) <- findAllActors curMap | actor.actorStatus.occupied === Available ]
+
+allActiveAlarms :: ReadOnlyShared [(RoomNumber, Detector)]
+allActiveAlarms
+  = toReadOnly (sdsProject (SDSLensRead readAlarms) SDSNoWrite myMap)
+where
+    readAlarms curMap = Ok [ (number,detector) \\ (number,detectors) <- allRoomStatus curMap
+                           , detector <- detectors
+                           | isHigh detector]
+
 alarmChanged :: Shared Bool					// to notify that one of the alarms has changed, should be turned into a lens
 alarmChanged  = sharedStore "alarms" False
 

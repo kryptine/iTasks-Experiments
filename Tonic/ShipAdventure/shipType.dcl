@@ -35,8 +35,11 @@ instance 	toString 	Detector
 	
 // shared stores:
 
-myMap  				:: Shared MyMap			// map of the ship
+myMap              :: Shared MyMap // map of the ship
 
+allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
+
+allActiveAlarms :: ReadOnlyShared [(RoomNumber, Detector)]
 
 // setting and resetting of the detection systems:
 

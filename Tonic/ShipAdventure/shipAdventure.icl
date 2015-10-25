@@ -43,51 +43,45 @@ where
 // given the alarms one has to decide which tasks to assign to handle the situation
 
 giveInstructions :: Task ()
-giveInstructions 
-=	forever 
-	(					get currentUser
-	>>= \me ->  		showAlarms 
-	>>= \alarms -> 		(							selectAlarm alarms
-							>&> 					withSelection (viewInformation () [] "No Alarm Selected")
-				 			\(alarmLoc,detector) -> selectSomeOneToHandle (alarmLoc,detector)
-				 			>&>						withSelection (viewInformation () [] "No Crew Member Selected")
-				 			\(actorLoc,actor) ->	viewRelativeStatus (actorLoc,actor) (alarmLoc,detector)
-				 			>&>						withSelection (viewInformation () [] "")
-							\_ ->					updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
-							>>* 					[ OnAction ActionByHand  	(hasValue (\prio -> handleAlarm (me,(alarmLoc,detector),(actorLoc,actor),prio)))
-	       											, OnAction ActionSimulated  (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc,detector) @! ()))
-	       											, OnAction ActionScript  	(hasValue (\prio -> autoHandleWithScript (me,(alarmLoc,detector),(actorLoc,actor),prio) @! ()))
-													, OnAction ActionCancel 	(always (return ()))
-	       											]
-	       				)
-	)
+giveInstructions =
+  forever
+  (          get currentUser
+  >>= \me -> (                        enterChoiceWithShared "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] allActiveAlarms
+             >&>                      withSelection (viewInformation () [] "No Alarm Selected")
+             \(alarmLoc, detector) -> selectSomeOneToHandle (alarmLoc, detector)
+             >&>                      withSelection (viewInformation () [] "No Crew Member Selected")
+             \(actorLoc, actor) ->    viewRelativeStatus (actorLoc, actor) (alarmLoc, detector)
+             >&>                      withSelection (viewInformation () [] "No status")
+             \_ ->                    updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
+             >>* [ OnAction ActionByHand    (hasValue (\prio -> handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), prio)))
+                 , OnAction ActionSimulated (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc, detector) @! ()))
+                 , OnAction ActionScript    (hasValue (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
+                 , OnAction ActionCancel    (always (return ()))
+                 ]
+            )
+  )
 where
 	ActionByHand 		= Action "By Hand"  []
 	ActionSimulated 	= Action "Simulate" []	
 	ActionScript 		= Action "Simulate with Script" []	
 
-	selectAlarm alarms
-		=	whileUnchanged alarmChanged 
-				(\_ -> enterChoice "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] alarms)
+    showAlarm (alarmLoc,detector) = "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
 
 	selectSomeOneToHandle :: (RoomNumber,Detector) -> Task (Int,MyActor)
 	selectSomeOneToHandle (number,detector)
-		=	whileUnchanged actorStatusChanged 
-				 (\_ ->		  		get myMap
-				  >>= \curMap ->  	let allActors = [(room,actor) \\ (room,actor) <- findAllActors curMap | actor.actorStatus.occupied === Available ] in
-									enterChoice (if (isEmpty allActors) "No one available at all !" ("Who should handle: " <+++ showAlarm (number,detector))) [] allActors)
+      = enterChoiceWithShared ("Who should handle: " <+++ showAlarm (number,detector)) [] allAvailableActors
 
 	viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
 	viewRelativeStatus (actorLoc,actor) (alarmLoc,FireDetector _)
-		= whileUnchanged myMap 
-				\curMap -> 	let		(nrExt,(extLoc,distExt,_)) 					= pathToClosestObject FireExtinguisher actorLoc curMap
-									(nrBlankets,(blanketLoc,distBlankets,_)) 	= pathToClosestObject Blanket 			actorLoc curMap
-							in	viewInformation "" [] 
-									(mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-											 [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
-											 , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
-											 , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
-											 ]) @! ()
+		= whileUnchanged myMap
+				\curMap -> 	let (nrExt, (extLoc, distExt, _))               = pathToClosestObject FireExtinguisher actorLoc curMap
+							    (nrBlankets, (blanketLoc, distBlankets, _)) = pathToClosestObject Blanket          actorLoc curMap
+							in  viewInformation "" []
+								  (mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
+								     [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+								     , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
+								     , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
+								     ]) @! ()
 	viewRelativeStatus (actorLoc,actor) (alarmLoc,SmokeDetector _) 
 		= whileUnchanged myMap 
 				\curMap ->	viewInformation "" [] 
@@ -276,20 +270,4 @@ pathToClosestObject kind actorLoc curMap
 
 mkRoom :: MyRoom -> Task ()
 mkRoom room = updateInformationWithShared "Room Status" [imageUpdate id (\(mp, _) -> roomImage True (Just room)) (\_ _ -> Nothing) (const snd)] myMap NoMapClick @! ()
-
-showAlarms :: Task [(RoomNumber,Detector)]
-showAlarms
-	=	whileUnchanged myMap 
-			(\curMap ->  let alarms = [ (number,detector)	\\ (number,detectors) <- allRoomStatus curMap
-														,  detector <- detectors
-														| isHigh detector]
-						 in if (isEmpty alarms)
-								(viewInformation "You have nothing yet to worry about ... Waiting for alarms to go off..." [] [])
-								(viewInformation "There are ALARMS !!!" [ViewWith (map showAlarm)] alarms)
-						>>| return alarms)
-
-showAlarm (alarmLoc,detector)
-	= "Room : " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ " !!! "
-
-
 

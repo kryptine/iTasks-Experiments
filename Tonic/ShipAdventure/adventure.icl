@@ -270,9 +270,9 @@ updateActor actor room = {room & actors = [actor:removeMember actor room.actors]
 // utility functions to find things located in the map
 
 findUser :: User (MAP r o a) ->  Maybe (RoomNumber,(Actor o a))
-findUser user map 
-#	found = [(location,actor) \\ (location,actor) <- findAllActors map | actor.userName == user]
-= if (isEmpty found) Nothing (Just (hd found)) 
+findUser user map
+  # found = [(location,actor) \\ (location,actor) <- findAllActors map | actor.userName == user]
+  = if (isEmpty found) Nothing (Just (hd found))
 
 findRoom :: (Actor o a) (MAP r o a) -> Room r o a
 findRoom actor map 
