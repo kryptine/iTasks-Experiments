@@ -10,6 +10,7 @@ import StdArray
 import Data.Data
 
 import ShipAdventure.Types, Adventure.Logging, ShipAdventure.Scripting
+import ShipAdventure.PathFinding
 
 // the next function should be placed in the library somewhere
 
@@ -83,8 +84,8 @@ where
         = viewSharedInformation () [ViewWith mkView] myMap @! ()
         where
         mkView curMap
-          # (nrExt, (extLoc, distExt, _))               = pathToClosestObject FireExtinguisher actorLoc curMap
-          # (nrBlankets, (blanketLoc, distBlankets, _)) = pathToClosestObject Blanket          actorLoc curMap
+          # (nrExt, (extLoc, distExt, _))               = shipPathToClosestObject FireExtinguisher actorLoc curMap
+          # (nrBlankets, (blanketLoc, distBlankets, _)) = shipPathToClosestObject Blanket          actorLoc curMap
           = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
                     [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
                     , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
@@ -101,7 +102,7 @@ where
         = viewSharedInformation () [ViewWith mkView] myMap @! ()
         where
         mkView curMap
-          # (nrPlugs, (plugLoc, distPlugs, _)) = pathToClosestObject Plug actorLoc curMap
+          # (nrPlugs, (plugLoc, distPlugs, _)) = shipPathToClosestObject Plug actorLoc curMap
           = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
                     [ ("The Flood Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
                     , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
@@ -135,9 +136,9 @@ where
 				-|| 
 				(let	path												= shipShortestPath curRoom.number alarmLoc curMap
 						alarmDist											= length path			 
-						(nrExt,(extLoc,distExt,dirExt)) 					= pathToClosestObject FireExtinguisher curRoom.number curMap
-						(nrBlankets,(blanketLoc,distBlankets,dirBlanket)) 	= pathToClosestObject Blanket curRoom.number curMap
-						(nrPlugs,(plugLoc,distPlugs,dirPlug)) 				= pathToClosestObject Plug curRoom.number curMap
+						(nrExt,(extLoc,distExt,dirExt)) 					= shipPathToClosestObject FireExtinguisher curRoom.number curMap
+						(nrBlankets,(blanketLoc,distBlankets,dirBlanket)) 	= shipPathToClosestObject Blanket curRoom.number curMap
+						(nrPlugs,(plugLoc,distPlugs,dirPlug)) 				= shipPathToClosestObject Plug curRoom.number curMap
 				in viewInformation "" []
 						(mkTable  [ "Object Description", "Rooms Away from " <+++ curActor.userName]
 								 [ (toString detector <+++ " Detected", toString alarmDist <+++ " (in Room " <+++ alarmLoc <+++ goto path <+++ ")")
@@ -265,17 +266,9 @@ findClosestObject  myLoc (alarmLoc,detector) curMap
 								 							(objLoc1,Just Blanket) (objLoc2,Just FireExtinguisher)
 
 findClosest roomNumber object curMap
-	= 	let revPath = reverse (thd3 (snd (pathToClosestObject object roomNumber curMap)))
+	= 	let revPath = reverse (thd3 (snd (shipPathToClosestObject object roomNumber curMap)))
 		in if (isEmpty revPath) Nothing (Just (fromExit (hd revPath)))
 		
-pathToClosestObject :: Object RoomNumber MyMap -> (Int,(RoomNumber,Int,[Exit]))  // returns: number of objects found, location of object, distance to object, shortest path to obejct
-pathToClosestObject kind actorLoc curMap
-	= (numberResources, if (numberResources == 0) (-1,-1,[]) (hd spath))
-	where
-		numberResources = length spath 
-		spath = sortBy (\(i,l1,p1) (j,l2,p2) -> i < j)   [let path = shipShortestPath actorLoc objectLoc curMap in (objectLoc, length path, path)
-													\\ (objectLoc,found) <- findAllObjects curMap | found == kind ]
-
 mkRoom :: MyRoom -> Task ()
 mkRoom room = viewInformation "Room Status" [imageView (\(room, _) -> roomImage True (Just room)) (\_ _ -> Nothing)] (room, NoMapClick) @! ()
 

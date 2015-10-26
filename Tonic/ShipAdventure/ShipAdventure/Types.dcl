@@ -58,14 +58,6 @@ resetDetector 	:: !Detector -> Detector
 
 shipShortestPath  :: RoomNumber RoomNumber MyMap -> [Exit]
 
-// returns: number of objects found, location of object, distance to object, shortest path to obejct
-
-pathToClosestObject :: Object RoomNumber MyMap -> (Int,(RoomNumber,Int,[Exit])) 
-
-
-// find room of closest detector located elsewhere ???
-
-findClosestObject :: RoomNumber (RoomNumber,Detector) MyMap -> (Maybe RoomNumber,Maybe Object)
 
 // making images from a map
 

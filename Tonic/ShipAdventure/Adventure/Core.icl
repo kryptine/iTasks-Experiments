@@ -180,24 +180,26 @@ delay = 1
 
 updateRoom :: RoomNumber ((Room r o a) -> (Room r o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a
 updateRoom roomNumber updRoom smap
-	= 	upd (updateRoom` roomNumber updRoom) smap 
-	>>| return ()
-where 
-	updateRoom` i upd [] 	  			= []
-	updateRoom` i upd [floor:floors]   	= [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
-	where
-		updateThisRoom room = if (i == room.number) (upd room)  room
+  =   upd (updateRoom` roomNumber updRoom) smap
+  >>| return ()
+  where
+  updateRoom` i upd []             = []
+  updateRoom` i upd [floor:floors] = [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
+    where
+    updateThisRoom room
+    | i == room.number = upd room
+    | otherwise        = room
 
 // actor status opdating
 
 updActorStatus :: User (a -> a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-updActorStatus user upd smap 
-	= 					get smap
-		>>= \curMap ->	case findUser user curMap of
-							Nothing 				-> return ()
-							Just (roomnumber,actor) -> updateRoom roomnumber (updateActor (updStatus actor)) smap
-where
-	updStatus actor = {actor & actorStatus = upd actor.actorStatus}
+updActorStatus user upd smap
+  =              get smap
+  >>= \curMap -> case findUser user curMap of
+                   Nothing                  -> return ()
+                   Just (roomnumber, actor) -> updateRoom roomnumber (updateActor (updStatus actor)) smap
+  where
+  updStatus actor = {actor & actorStatus = upd actor.actorStatus}
 
 // room status updating
 
@@ -233,17 +235,17 @@ getRoom roomNumber smap = get smap >>= return o getRoomFromMap roomNumber
 
 getRoomFromMap :: RoomNumber (MAP r o a) -> Maybe (Room r o a) | iTask r & iTask o & iTask a & Eq o
 getRoomFromMap roomNumber m
-	= case [room \\ room <- allRooms m | room.number == roomNumber] of
-	  	[] -> Nothing
-	  	status -> Just (hd status)
+  = case [room \\ room <- allRooms m | room.number == roomNumber] of
+      []     -> Nothing
+      status -> Just (hd status)
 
 getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
-getRoomStatus roomNumber smap 
-	=			get smap
-	>>= \map ->	case [room.roomStatus \\ room <- allRooms map | room.number == roomNumber] of
-					[] -> return Nothing
-					status -> return (Just (hd status))
-					 
+getRoomStatus roomNumber smap
+  =           get smap
+  >>= \map -> case [room.roomStatus \\ room <- allRooms map | room.number == roomNumber] of
+                [] -> return Nothing
+                status -> return (Just (hd status))
+
 updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
 updRoomStatus roomNumber upd smap = updateRoom roomNumber (\room -> {room & roomStatus = upd room.roomStatus}) smap
 
@@ -267,45 +269,43 @@ updateActor actor room = {room & actors = [actor:removeMember actor room.actors]
 // utility functions to find things located in the map
 
 findUser :: User (MAP r o a) ->  Maybe (RoomNumber,(Actor o a))
-findUser user map
-  # found = [(location,actor) \\ (location,actor) <- findAllActors map | actor.userName == user]
-  = if (isEmpty found) Nothing (Just (hd found))
+findUser user map = listToMaybe [ (location,actor) \\ (location,actor) <- findAllActors map
+                                | actor.userName == user]
 
 findRoom :: (Actor o a) (MAP r o a) -> Room r o a
-findRoom actor map 
-# rooms	=	[ room
-			\\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors
-			| actor.userName == userName
-			] 
-= case rooms of 
-	[]  -> abort "cannot find room of actor"
-	_	-> hd rooms
+findRoom actor map
+  # rooms = [ room
+            \\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors
+            | actor.userName == userName
+            ]
+  = case rooms of
+      []    -> abort "cannot find room of actor"
+      [x:_] -> x
 
-latestActorStatus :: (Actor o a) (Room r o a) -> (Actor o a)
-latestActorStatus actor room = hd [nactor \\ nactor <- room.actors | nactor.userName == actor.userName]
+latestActorStatus :: (Actor o a) (Room r o a) -> Actor o a
+latestActorStatus actor room = hd [nactor \\ nactor <- room.actors
+                                  | nactor.userName == actor.userName]
 
-findAllActors :: (MAP r o a) ->  [(RoomNumber,(Actor o a))]
-findAllActors map =	[ (room.number,actor)
-					\\ floor <- map, layer <- floor, room <- layer, actor <- room.actors
-					]
+findAllActors :: (MAP r o a) ->  [(RoomNumber, Actor o a)]
+findAllActors map = [ (room.number,actor)
+                    \\ floor <- map, layer <- floor, room <- layer, actor <- room.actors
+                    ]
 
-findAllObjects :: (MAP r o a) -> [(RoomNumber,o)]
-findAllObjects map =	[ (room.number,object)
-						\\ floor <- map, layer <- floor, room <- layer, object <- room.inventory
-						]
+findAllObjects :: (MAP r o a) -> [(RoomNumber, o)]
+findAllObjects map = [ (room.number,object)
+                     \\ floor <- map, layer <- floor, room <- layer, object <- room.inventory
+                     ]
 
 findObjectsInRoom :: RoomNumber (MAP r o a) -> Maybe o
-findObjectsInRoom roomNumber map = let listOfo = [o \\ (i,o) <- findAllObjects map | i == roomNumber] in 
-									if (isEmpty listOfo) Nothing (Just (hd listOfo))
+findObjectsInRoom roomNumber map = listToMaybe [o \\ (i,o) <- findAllObjects map | i == roomNumber]
 
-allRoomStatus :: (MAP r o a) -> [(RoomNumber,r)] 
+allRoomStatus :: (MAP r o a) -> [(RoomNumber, r)]
 allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
 
-
 allRoomNumbers :: (MAP r o a) ->  [RoomNumber]
-allRoomNumbers map = 	[room.number
-						\\ floor <- map, layer <- floor, room <- layer
-						]
+allRoomNumbers map = [room.number
+                     \\ floor <- map, layer <- floor, room <- layer
+                     ]
 
 allRooms :: (MAP r o a) ->  [Room r o a]
 allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
@@ -313,3 +313,10 @@ allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)
 
+pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
+pathToClosestObject sp kind actorLoc curMap
+  # spath = sortBy (\(i, l1, p1) (j, l2, p2) -> i < j) [let path = sp actorLoc objectLoc curMap in (objectLoc, length path, path)
+                                                       \\ (objectLoc, found) <- findAllObjects curMap | found == kind ]
+  = (length spath, case spath of
+                     []    -> (-1, -1, [])
+                     [x:_] -> x)

@@ -13,6 +13,7 @@ import Data.Data
 
 import Adventure.Core
 from Adventure.Logging import addLog
+import ShipAdventure.PathFinding
 
 
 derive class iTask Detector, Object, ActorStatus, Availability, Priority, MapClick
@@ -92,33 +93,10 @@ resetDetector (FloodDetector b) = FloodDetector False
 
 // find stuf, shortest path to objects
 
-findClosestObject :: RoomNumber (RoomNumber,Detector) MyMap -> (Maybe RoomNumber,Maybe Object)
-findClosestObject  myLoc (alarmLoc,detector) curMap
-	= 	case detector of
-			(SmokeDetector _) = (Just myLoc,Nothing)
-			(FloodDetector _) = case findClosest myLoc Plug curMap of
-								 Nothing	-> (Nothing,Nothing)
-								 objLoc	 	-> (objLoc,Just Plug)
-			(FireDetector _)  = case (findClosest myLoc Blanket curMap, findClosest myLoc FireExtinguisher curMap) of
-								 (Nothing,Nothing)  -> (Nothing,Nothing)
-								 (Nothing,objLoc)   -> (objLoc,Just FireExtinguisher)
-								 (objLoc,Nothing)   -> (objLoc,Just Blanket)
-								 (objLoc1,objLoc2)  ->  if (fromJust objLoc1 < fromJust objLoc2)
-								 							(objLoc1,Just Blanket) (objLoc2,Just FireExtinguisher)
-
 findClosest roomNumber object curMap
-	= 	let revPath = reverse (thd3 (snd (pathToClosestObject object roomNumber curMap)))
+	= 	let revPath = reverse (thd3 (snd (shipPathToClosestObject object roomNumber curMap)))
 		in if (isEmpty revPath) Nothing (Just (fromExit (hd revPath)))
 		
-pathToClosestObject :: Object RoomNumber MyMap -> (Int,(RoomNumber,Int,[Exit]))  // returns: number of objects found, location of object, distance to object, shortest path to obejct
-pathToClosestObject kind actorLoc curMap
-	= (numberResources, if (numberResources == 0) (-1,-1,[]) (hd spath))
-	where
-		numberResources = length spath 
-		spath = sortBy (\(i,l1,p1) (j,l2,p2) -> i < j)   [let path = shipShortestPath actorLoc objectLoc curMap in (objectLoc, length path, path) 
-													\\ (objectLoc,found) <- findAllObjects curMap | found == kind ]
-
-
 // general map viewing
 
 showMap :: Task MapClick
