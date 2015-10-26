@@ -91,12 +91,6 @@ resetDetector (FireDetector  b) = FireDetector  False
 resetDetector (SmokeDetector b) = SmokeDetector False
 resetDetector (FloodDetector b) = FloodDetector False
 
-// find stuf, shortest path to objects
-
-findClosest roomNumber object curMap
-	= 	let revPath = reverse (thd3 (snd (shipPathToClosestObject object roomNumber curMap)))
-		in if (isEmpty revPath) Nothing (Just (fromExit (hd revPath)))
-		
 // general map viewing
 
 showMap :: Task MapClick
