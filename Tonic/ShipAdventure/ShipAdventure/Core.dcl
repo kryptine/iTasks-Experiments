@@ -1,4 +1,4 @@
-definition module shipAdventure
+definition module ShipAdventure.Core
 
 import iTasks
 

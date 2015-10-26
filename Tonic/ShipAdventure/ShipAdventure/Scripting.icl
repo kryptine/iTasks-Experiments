@@ -1,8 +1,8 @@
-implementation module scripting
+implementation module ShipAdventure.Scripting
  
 import iTasks
  
-import shipType
+import ShipAdventure.Types
 
 // scripted simulation
 

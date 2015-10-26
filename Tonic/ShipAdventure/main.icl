@@ -4,13 +4,11 @@ module main
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
 import iTasks.API.Extensions.SVG.SVGlet
-import Graphics.Scalable
-import qualified Data.List as DL
 from Data.Func import mapSt
 import StdArray
 import Data.Data
-import logging
-import shipAdventure, shipType
+import Adventure.Logging
+import ShipAdventure.Core, ShipAdventure.Types
 
 // main tasks
 

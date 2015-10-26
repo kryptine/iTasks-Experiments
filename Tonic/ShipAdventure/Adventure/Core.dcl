@@ -1,4 +1,4 @@
-definition module adventure
+definition module Adventure.Core
  
 import iTasks
  

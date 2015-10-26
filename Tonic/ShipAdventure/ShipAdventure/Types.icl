@@ -1,4 +1,4 @@
-implementation module shipType
+implementation module ShipAdventure.Types
  
 //import iTasks
  
@@ -11,8 +11,9 @@ from Data.Func import mapSt
 import StdArray
 import Data.Data
 
+import Adventure.Core
+from Adventure.Logging import addLog
 
-import adventure
 
 derive class iTask Detector, Object, ActorStatus, Availability, Priority, MapClick
 
@@ -63,8 +64,6 @@ setRoomDetectors
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
-
-from logging import addLog
 
 setAlarm :: User (RoomNumber,Detector) Bool (Shared MyMap) -> Task ()
 setAlarm user (alarmLoc,detector) bool smap

@@ -1,4 +1,4 @@
-implementation module adventure
+implementation module Adventure.Core
  
 import StdArray
 import iTasks

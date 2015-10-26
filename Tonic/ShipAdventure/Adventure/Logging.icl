@@ -1,4 +1,4 @@
-implementation module logging
+implementation module Adventure.Logging
  
 import iTasks
  

@@ -1,8 +1,8 @@
-definition module scripting
+definition module ShipAdventure.Scripting
  
 import iTasks
  
-import shipType
+import ShipAdventure.Types
 
 
 // script language

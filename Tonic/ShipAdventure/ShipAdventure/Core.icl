@@ -1,4 +1,4 @@
-implementation module shipAdventure
+implementation module ShipAdventure.Core
 
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
@@ -9,7 +9,7 @@ from Data.Func import mapSt
 import StdArray
 import Data.Data
 
-import shipType, logging, scripting
+import ShipAdventure.Types, Adventure.Logging, ShipAdventure.Scripting
 
 // the next function should be placed in the library somewhere
 

@@ -1,6 +1,6 @@
-definition module shipType
+definition module ShipAdventure.Types
  
-import adventure
+import Adventure.Core
 
 :: MyMap		:== MAP 	RoomStatus Object ActorStatus
 :: MyActor		:== Actor 	Object ActorStatus
