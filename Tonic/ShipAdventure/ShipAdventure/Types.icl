@@ -149,7 +149,7 @@ where
 
 // shortest path given the alarms set on the ship
 
-shipShortestPath :: RoomNumber RoomNumber MyMap -> [Exit]
+shipShortestPath :: RoomNumber RoomNumber MyMap -> Maybe [Exit]
 shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
   where
   cost detectors = 1 + sum (map detectorCost detectors)

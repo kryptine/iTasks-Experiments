@@ -27,20 +27,20 @@ instance == Exit where (==) e1 e2 =e1 === e2
 :: Weight      :== Int
 :: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
 
-shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
+shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> Maybe [Exit]
 shortestPath cost startRoomNumber endRoomNumber allRooms
   = reconstructSP (findSP cost (mkGraph allRooms) ('DH'.singleton (0, startRoomNumber))) endRoomNumber []
   where
-  reconstructSP :: !(Graph r o a) !RoomNumber ![Exit] -> [Exit]
+  reconstructSP :: !(Graph r o a) !RoomNumber ![Exit] -> Maybe [Exit]
   reconstructSP graph currIdx path
-    | currIdx == startRoomNumber = path
+    | currIdx == startRoomNumber = Just path
     | otherwise = case 'DIS'.get currIdx graph of
                     Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
                                               Just (_, _, {exits}) -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
-                                                                        [] -> path
+                                                                        [] -> Nothing
                                                                         [exit : _] -> reconstructSP graph prevIdx [exit : path]
-                                              _                    -> path
-                    _ -> path
+                                              _                    -> Nothing
+                    _ -> Nothing
 
   findSP :: !(r -> Weight) !(Graph r o a) !(Heap (Distance, NodeIdx)) -> Graph r o a
   findSP cost graph queue
@@ -63,7 +63,7 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
               = ( 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
                 , 'DH'.insert (alt, nRoom.number) queue)
             | otherwise = (graph, queue)
-		  _ = (graph, queue)
+          _ = (graph, queue)
     foldExits _ _ _ (graph, queue) = (graph, queue)
 
   mkGraph :: !(MAP r o a) -> Graph r o a
@@ -159,7 +159,7 @@ useObject roomNumber object actor smap
 
 // auto moves around the maze
 
-autoMove :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+autoMove :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> Maybe [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
 autoMove thisRoom target pathFun actor smap
 | thisRoom == target 
 	= 	return True
@@ -167,14 +167,15 @@ autoMove thisRoom target pathFun actor smap
 	>>= \curMap -> 	let room 	= findRoom actor curMap 
 				 		nactor  = latestActorStatus actor room
 				 		path	= pathFun thisRoom target curMap
-					in	if (isEmpty path) (return False)
-						(		let nextRoom = fromExit (hd path)
-								in			waitForTimer  {Time | hour = 0, min = 0, sec = delay}
-									>>|		move room.number nextRoom nactor smap
-					 				>>|		waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
-					 				>>|		autoMove nextRoom target pathFun nactor smap
-						)
-		
+					in	case pathFun thisRoom target curMap of
+                          Just path=:[_:_]
+						    # nextRoom = fromExit (hd path)
+							=     waitForTimer  {Time | hour = 0, min = 0, sec = delay}
+							  >>| move room.number nextRoom nactor smap
+					 		  >>| waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
+					 		  >>| autoMove nextRoom target pathFun nactor smap
+                          _ = return False
+
 delay = 1
 
 // room updating
@@ -314,10 +315,12 @@ allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)
 
-pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
+pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, Maybe [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
 pathToClosestObject sp kind actorLoc curMap
-  # spath = sortBy (\(i, l1, p1) (j, l2, p2) -> i < j) [let path = sp actorLoc objectLoc curMap in (objectLoc, length path, path)
-                                                       \\ (objectLoc, found) <- findAllObjects curMap | found == kind ]
+  # spath = sortBy (\(i, _, _) (j, _, _) -> i < j) [case sp actorLoc objectLoc curMap of
+                                                      path=:(Just es) -> (objectLoc, length es, path)
+                                                      _               -> (-1, -1, Nothing)
+                                                   \\ (objectLoc, found) <- findAllObjects curMap | found == kind ]
   = (length spath, case spath of
-                     []    -> (-1, -1, [])
+                     []    -> (-1, -1, Nothing)
                      [x:_] -> x)

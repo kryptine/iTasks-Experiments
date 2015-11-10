@@ -79,13 +79,13 @@ unlockExit 	:: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask
 
 // shortest path calculation
 
-shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> [Exit]
+shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> Maybe [Exit]
 
 // auto movement from actors thru the map, fetching. dropping and using objects
 
-autoMove 	   	:: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+autoMove 	   	:: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> Maybe [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
 pickupObject   	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 useObject 	   	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 dropDownObject 	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
 
-pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
+pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, Maybe [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct

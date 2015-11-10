@@ -50,6 +50,10 @@ actorWithInstructions user
 
 // given the alarms one has to decide which tasks to assign to handle the situation
 
+spToDistString :: (Maybe [Exit]) -> String
+spToDistString (Just es) = toString (length es)
+spToDistString _         = "Room unreachable!"
+
 giveInstructions :: Task ()
 giveInstructions =
   forever
@@ -87,7 +91,7 @@ giveInstructions =
         # (nrExt, (extLoc, distExt, _))               = shipPathToClosestObject FireExtinguisher actorLoc curMap
         # (nrBlankets, (blanketLoc, distBlankets, _)) = shipPathToClosestObject Blanket          actorLoc curMap
         = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-                  [ ("The Fire Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+                  [ ("The Fire Detected in Room " <+++ alarmLoc, spToDistString (shipShortestPath actorLoc alarmLoc curMap))
                   , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
                   , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
                   ]
@@ -96,7 +100,7 @@ giveInstructions =
       where
       mkView curMap
         = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-                  [ ("The Smoke Detected in Room " <+++ alarmLoc, length (shipShortestPath actorLoc alarmLoc curMap))
+                  [ ("The Smoke Detected in Room " <+++ alarmLoc, spToDistString (shipShortestPath actorLoc alarmLoc curMap))
                   ]
   viewRelativeStatus (actorLoc, actor) (alarmLoc, FloodDetector _)
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
@@ -104,7 +108,7 @@ giveInstructions =
       mkView curMap
         # (nrPlugs, (plugLoc, distPlugs, _)) = shipPathToClosestObject Plug actorLoc curMap
         = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-                  [ ("The Flood Detected in Room " <+++ alarmLoc, toString (length (shipShortestPath actorLoc alarmLoc curMap)))
+                  [ ("The Flood Detected in Room " <+++ alarmLoc, spToDistString (shipShortestPath actorLoc alarmLoc curMap))
                   , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
                   ]
 
@@ -134,13 +138,12 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
     = viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
       -||
       (let path                                                 = shipShortestPath curRoom.number alarmLoc curMap
-           alarmDist                                            = length path
            (nrExt, (extLoc, distExt, dirExt))                   = shipPathToClosestObject FireExtinguisher curRoom.number curMap
            (nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = shipPathToClosestObject Blanket curRoom.number curMap
            (nrPlugs, (plugLoc, distPlugs, dirPlug))             = shipPathToClosestObject Plug curRoom.number curMap
       in viewInformation "" []
             (mkTable [ "Object Description", "Rooms Away from " <+++ curActor.userName]
-               [ (toString detector <+++ " Detected", toString alarmDist <+++ " (in Room " <+++ alarmLoc <+++ goto path <+++ ")")
+               [ (toString detector <+++ " Detected", spToDistString path <+++ " (in Room " <+++ alarmLoc <+++ goto path <+++ ")")
                , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ goto dirExt <+++ "}")
                , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ goto dirBlanket <+++ ")")
                , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ goto dirPlug <+++ ")")
@@ -190,8 +193,9 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
     giveUp          =   updStatusOfActor curActor.userName Available myMap
                     >>| return (Just "I gave up, send somebody else...")
 
-    goto []  = ", you are there"
-    goto dir = ", goto " +++ toString (hd dir)
+    goto Nothing    = "Unreachable!"
+    goto (Just [])  = ", you are there"
+    goto (Just dir) = ", goto " +++ toString (hd dir)
 
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
@@ -265,9 +269,12 @@ findClosestObject  myLoc (alarmLoc, detector) curMap
                                                     (objLoc2, Just FireExtinguisher)
 
 findClosest roomNumber object curMap
-  # revPath = reverse (thd3 (snd (shipPathToClosestObject object roomNumber curMap)))
-  | isEmpty revPath = Nothing
-  | otherwise       = Just (fromExit (hd revPath))
+  = case shipPathToClosestObject object roomNumber curMap of
+      (_, (_, _, Just path))
+        # revPath = reverse path
+       | isEmpty revPath = Nothing
+       | otherwise       = Just (fromExit (hd revPath))
+      _ = Nothing
 
 mkRoom :: MyRoom -> Task ()
 mkRoom room = viewInformation "Room Status" [imageView (\(room, _) -> roomImage True (Just room)) (\_ _ -> Nothing)] (room, NoMapClick) @! ()
