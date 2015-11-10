@@ -63,6 +63,7 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
               = ( 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
                 , 'DH'.insert (alt, nRoom.number) queue)
             | otherwise = (graph, queue)
+		  _ = (graph, queue)
     foldExits _ _ _ (graph, queue) = (graph, queue)
 
   mkGraph :: !(MAP r o a) -> Graph r o a
@@ -122,7 +123,7 @@ moveOneStep roomViz actor mbtask smap
 where
     exitActions room nactor
       = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) nactor smap))
-        \\ (exit, _) <- room.exits
+        \\ (exit, False) <- room.exits
         ]
     inventoryActions room nactor
       = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object nactor smap))
