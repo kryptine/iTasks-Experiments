@@ -90,27 +90,31 @@ giveInstructions =
       mkView curMap
         # (nrExt, (extLoc, distExt, _))               = shipPathToClosestObject FireExtinguisher actorLoc curMap
         # (nrBlankets, (blanketLoc, distBlankets, _)) = shipPathToClosestObject Blanket          actorLoc curMap
-        = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-                  [ ("The Fire Detected in Room " <+++ alarmLoc, spToDistString (shipShortestPath actorLoc alarmLoc curMap))
-                  , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ " )")
-                  , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ " )")
+        = mkTable [ "Object Description", 									"Located in Room" , 		"Distance from " <+++ actor.userName]
+                  [ ("Fire Alarm !! " , 									roomToString alarmLoc, 			spToDistString (shipShortestPath actorLoc alarmLoc curMap))
+                  , ("Closest Extinquisher (" <+++ nrExt <+++ " left)", 	roomToString extLoc, 			toString distExt)
+                  , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left)", 	roomToString blanketLoc,		toString distBlankets)
                   ]
   viewRelativeStatus (actorLoc, actor) (alarmLoc, SmokeDetector _)
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
-        = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-                  [ ("The Smoke Detected in Room " <+++ alarmLoc, spToDistString (shipShortestPath actorLoc alarmLoc curMap))
+        = mkTable [ "Object Description", 									"Located in Room" , 		"Distance from " <+++ actor.userName]
+                  [ ("Smoke Alarm !! ",										roomToString alarmLoc, 			spToDistString (shipShortestPath actorLoc alarmLoc curMap))
                   ]
   viewRelativeStatus (actorLoc, actor) (alarmLoc, FloodDetector _)
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
         # (nrPlugs, (plugLoc, distPlugs, _)) = shipPathToClosestObject Plug actorLoc curMap
-        = mkTable [ "Object Description", "Rooms Away from " <+++ actor.userName <+++ " in Room " <+++ actorLoc]
-                  [ ("The Flood Detected in Room " <+++ alarmLoc, spToDistString (shipShortestPath actorLoc alarmLoc curMap))
-                  , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ " )")
+        = mkTable [ "Object Description", 									"Located in Room", 			"Distance from " <+++ actor.userName]
+                  [ ("Flood Alarm !! ",										roomToString alarmLoc, 			spToDistString (shipShortestPath actorLoc alarmLoc curMap))
+                  , ("Closest plug (" <+++ nrPlugs <+++ " left)", 			roomToString plugLoc,			toString distPlugs)
                   ]
+
+roomToString -1 = "Room cannot be found"
+roomToString n = toString n
+
 
 handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
   =   updStatusOfActor actor.userName Busy myMap
@@ -142,11 +146,11 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
            (nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = shipPathToClosestObject Blanket curRoom.number curMap
            (nrPlugs, (plugLoc, distPlugs, dirPlug))             = shipPathToClosestObject Plug curRoom.number curMap
       in viewInformation "" []
-            (mkTable [ "Object Description", "Rooms Away from " <+++ curActor.userName]
-               [ (toString detector <+++ " Detected", spToDistString path <+++ " (in Room " <+++ alarmLoc <+++ goto path <+++ ")")
-               , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", toString distExt <+++ " (in Room " <+++ extLoc <+++ goto dirExt <+++ "}")
-               , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", toString distBlankets <+++ " (in Room " <+++ blanketLoc <+++ goto dirBlanket <+++ ")")
-               , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", toString distPlugs <+++ " (in Room " <+++ plugLoc <+++ goto dirPlug <+++ ")")
+            (mkTable [ "Object Description", 									"Located in Room", 		"Distance from " <+++ curActor.userName, "Take Exit"]
+               [ (toString detector, 											roomToString alarmLoc, 	spToDistString path, 					goto path)
+               , ("Closest Extinquisher (" <+++ nrExt <+++ " left in total)", 	roomToString extLoc, 	toString distExt,						goto dirExt)
+               , ("Closest Blanket ("	<+++ nrBlankets	<+++ " left in total)", roomToString blanketLoc,toString distBlankets,					goto dirBlanket)
+               , ("Closest plug (" <+++ nrPlugs <+++ " left in total)", 		roomToString plugLoc, 	toString distPlugs,						goto dirPlug)
                ])) @! ()
       >>* [ OnAction (Action "Use Fire Extinguisher" []) (ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
           , OnAction (Action "Use Blanket" [])           (ifCond (mayUseBlanket detector)      (return (Just useBlanket)))
@@ -194,8 +198,8 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
                     >>| return (Just "I gave up, send somebody else...")
 
     goto Nothing    = "Unreachable!"
-    goto (Just [])  = ", you are there"
-    goto (Just dir) = ", goto " +++ toString (hd dir)
+    goto (Just [])  = "you are in the target room"
+    goto (Just dir) = toString (hd dir)
 
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()

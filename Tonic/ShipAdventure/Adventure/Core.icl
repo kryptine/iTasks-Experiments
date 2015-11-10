@@ -317,10 +317,12 @@ existsRoom i map = isMember i (allRoomNumbers map)
 
 pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, Maybe [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
 pathToClosestObject sp kind actorLoc curMap
-  # spath = sortBy (\(i, _, _) (j, _, _) -> i < j) [case sp actorLoc objectLoc curMap of
-                                                      path=:(Just es) -> (objectLoc, length es, path)
-                                                      _               -> (-1, -1, Nothing)
-                                                   \\ (objectLoc, found) <- findAllObjects curMap | found == kind ]
+  # spath = sortBy (\(i, _, _) (j, _, _) -> i < j) (filter (\(o,l,p) -> 0 < o)
+  														[case sp actorLoc objectLoc curMap of
+                                                      			path=:(Just es) -> (objectLoc, length es, path)
+                                                      			_       		-> (-1, -1, Nothing)
+                                                   		\\ (objectLoc, found) <- findAllObjects curMap 
+                                                   		| found == kind ])
   = (length spath, case spath of
                      []    -> (-1, -1, Nothing)
                      [x:_] -> x)
