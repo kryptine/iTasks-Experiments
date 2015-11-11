@@ -23,22 +23,26 @@ instance == Exit where (==) e1 e2 =e1 === e2
 
 :: PreviousIdx :== Int
 :: NodeIdx     :== Int
-:: Distance :== Int
 :: Weight      :== Int
 :: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
 
-shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> Maybe [Exit]
+infinity := 67108864
+
+shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> Maybe ([Exit], Distance)
 shortestPath cost startRoomNumber endRoomNumber allRooms
   = reconstructSP (findSP cost (mkGraph allRooms) ('DH'.singleton (0, startRoomNumber))) endRoomNumber []
   where
-  reconstructSP :: !(Graph r o a) !RoomNumber ![Exit] -> Maybe [Exit]
-  reconstructSP graph currIdx path
-    | currIdx == startRoomNumber = Just path
+  reconstructSP :: !(Graph r o a) !RoomNumber ![Exit] -> Maybe ([Exit], Distance)
+  reconstructSP graph currIdx path = reconstructSP` 0 graph currIdx path
+
+  reconstructSP` :: !Int !(Graph r o a) !RoomNumber ![Exit] -> Maybe ([Exit], Distance)
+  reconstructSP` totalDist graph currIdx path
+    | currIdx == startRoomNumber = Just (path, totalDist)
     | otherwise = case 'DIS'.get currIdx graph of
-                    Just (_, prevIdx, _) -> case 'DIS'.get prevIdx graph of
-                                              Just (_, _, {exits}) -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
+                    Just (d1, prevIdx, _) -> case 'DIS'.get prevIdx graph of
+                                              Just (d2, _, {exits}) -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
                                                                         [] -> Nothing
-                                                                        [exit : _] -> reconstructSP graph prevIdx [exit : path]
+                                                                        [exit : _] -> reconstructSP` (totalDist + d1 + d2) graph prevIdx [exit : path]
                                               _                    -> Nothing
                     _ -> Nothing
 
@@ -50,21 +54,22 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
           Just ((minDist, minIdx), queue)
             = case 'DIS'.get minIdx graph of
                 Just (_, _, {exits})
-                  #! (graph, queue) = foldr (foldExits minDist minIdx) (graph, queue) exits
+                  #! (graph, queue) = foldr (foldExits cost minDist minIdx) (graph, queue) exits
                   = findSP cost graph queue
                 _ = graph
           _ = graph
     where
-    foldExits minDist minIdx (exit, False) (graph, queue)
+    foldExits :: !(r -> Weight) !Distance !NodeIdx !(!Exit, !Locked) !(!Graph r o a, !Heap (Distance, NodeIdx)) -> (!Graph r o a, !Heap (Distance, NodeIdx))
+    foldExits cost minDist minIdx (exit, False) (graph, queue)
       = case 'DIS'.get (fromExit exit) graph of
           Just (nDist, nPrevIdx, nRoom)
             #! alt = minDist + cost nRoom.roomStatus
             | alt < nDist
-              = ( 'DIS'.alter (fmap (\(d, prev, r) -> (alt, minIdx, r))) nRoom.number graph
+              = ( 'DIS'.alter (fmap (\(_, _, r) -> (alt, minIdx, r))) nRoom.number graph
                 , 'DH'.insert (alt, nRoom.number) queue)
             | otherwise = (graph, queue)
           _ = (graph, queue)
-    foldExits _ _ _ (graph, queue) = (graph, queue)
+    foldExits _ _ _ _ (graph, queue) = (graph, queue)
 
   mkGraph :: !(MAP r o a) -> Graph r o a
   mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
@@ -74,7 +79,7 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
 
     roomToGraph :: !(Room r o a) !(Graph r o a) -> Graph r o a
     roomToGraph room=:{number} graph
-      #! dist = if (number == startRoomNumber) 0 67108864
+      #! dist = if (number == startRoomNumber) 0 infinity
       = 'DIS'.put number (dist, -1, room) graph
 
 fromExit :: Exit -> Int
@@ -159,7 +164,7 @@ useObject roomNumber object actor smap
 
 // auto moves around the maze
 
-autoMove :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> Maybe [Exit]) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
+autoMove :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
 autoMove thisRoom target pathFun actor smap
 | thisRoom == target 
 	= 	return True
@@ -168,7 +173,7 @@ autoMove thisRoom target pathFun actor smap
 				 		nactor  = latestActorStatus actor room
 				 		path	= pathFun thisRoom target curMap
 					in	case pathFun thisRoom target curMap of
-                          Just path=:[_:_]
+                          Just (path=:[_:_], _)
 						    # nextRoom = fromExit (hd path)
 							=     waitForTimer  {Time | hour = 0, min = 0, sec = delay}
 							  >>| move room.number nextRoom nactor smap
@@ -315,12 +320,12 @@ allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)
 
-pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe [Exit]) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, Maybe [Exit])) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
+pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, Maybe ([Exit], Distance))) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
 pathToClosestObject sp kind actorLoc curMap
-  # spath = sortBy (\(i, _, _) (j, _, _) -> i < j) [case sp actorLoc objectLoc curMap of
-                                                      path=:(Just es) -> (objectLoc, length es, path)
-                                                      _               -> (-1, -1, Nothing)
+  # spath = sortBy (\(_, i, _) (_, j, _) -> i < j) [case sp actorLoc objectLoc curMap of
+                                                      path=:(Just (_, dist)) -> (objectLoc, dist, path)
+                                                      _                      -> (-1, infinity, Nothing)
                                                    \\ (objectLoc, found) <- findAllObjects curMap | found == kind ]
-  = (length spath, case spath of
-                     []    -> (-1, -1, Nothing)
-                     [x:_] -> x)
+  = case spath of
+      [x=:(_, _, Just (path, _)) :_] -> (length path, x)
+      []                             -> (infinity, (-1, -1, Nothing))

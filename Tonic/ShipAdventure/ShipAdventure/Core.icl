@@ -50,9 +50,9 @@ actorWithInstructions user
 
 // given the alarms one has to decide which tasks to assign to handle the situation
 
-spToDistString :: (Maybe [Exit]) -> String
-spToDistString (Just es) = toString (length es)
-spToDistString _         = "Room unreachable!"
+spToDistString :: (Maybe ([Exit], Distance)) -> String
+spToDistString (Just (es, dist)) = toString (length es)
+spToDistString _                 = "Room unreachable!"
 
 giveInstructions :: Task ()
 giveInstructions =
@@ -193,9 +193,9 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
     giveUp          =   updStatusOfActor curActor.userName Available myMap
                     >>| return (Just "I gave up, send somebody else...")
 
-    goto Nothing    = "Unreachable!"
-    goto (Just [])  = ", you are there"
-    goto (Just dir) = ", goto " +++ toString (hd dir)
+    goto Nothing         = "Unreachable!"
+    goto (Just ([], _))  = ", you are there"
+    goto (Just (dir, _)) = ", goto " +++ toString (hd dir)
 
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
@@ -270,10 +270,10 @@ findClosestObject  myLoc (alarmLoc, detector) curMap
 
 findClosest roomNumber object curMap
   = case shipPathToClosestObject object roomNumber curMap of
-      (_, (_, _, Just path))
+      (_, (_, _, Just (path, _)))
         # revPath = reverse path
-       | isEmpty revPath = Nothing
-       | otherwise       = Just (fromExit (hd revPath))
+        | isEmpty revPath = Nothing
+        | otherwise       = Just (fromExit (hd revPath))
       _ = Nothing
 
 mkRoom :: MyRoom -> Task ()

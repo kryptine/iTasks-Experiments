@@ -52,12 +52,6 @@ toggleDetector 	:: !Detector -> Detector
 setDetector 	:: !Detector -> Detector
 resetDetector 	:: !Detector -> Detector
 
-// path finding:
-
-// shortest path from room i to j
-
-shipShortestPath  :: RoomNumber RoomNumber MyMap -> Maybe [Exit]
-
 
 // making images from a map
 

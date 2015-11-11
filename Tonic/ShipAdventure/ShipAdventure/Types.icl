@@ -147,17 +147,6 @@ where
 	detectors = [FireDetector False,SmokeDetector False,FloodDetector False]
 
 
-// shortest path given the alarms set on the ship
-
-shipShortestPath :: RoomNumber RoomNumber MyMap -> Maybe [Exit]
-shipShortestPath startRoomNumber endRoomNumber allRooms = shortestPath cost startRoomNumber endRoomNumber allRooms
-  where
-  cost detectors = 1 + sum (map detectorCost detectors)
-  detectorCost (FireDetector  True) = 1000
-  detectorCost (SmokeDetector True) = 250
-  detectorCost (FloodDetector True) = 1000
-  detectorCost _                    = 0
-
 // making an image from the map ...
 
 mapImage :: !Bool !(!MyMap, MapClick) !*TagSource -> Image (a, MapClick)
