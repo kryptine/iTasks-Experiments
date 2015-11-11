@@ -45,6 +45,12 @@ allAvailableActors
 where
     readActors curMap = Ok [(room,actor) \\ (room,actor) <- findAllActors curMap | actor.actorStatus.occupied === Available ]
 
+allActors :: ReadOnlyShared [(RoomNumber, MyActor)]
+allActors
+  = toReadOnly (sdsProject (SDSLensRead readActors) SDSNoWrite myMap)
+where
+    readActors curMap = Ok [(room,actor) \\ (room,actor) <- findAllActors curMap]
+
 allActiveAlarms :: ReadOnlyShared [(RoomNumber, Detector)]
 allActiveAlarms
   = toReadOnly (sdsProject (SDSLensRead readAlarms) SDSNoWrite myMap)

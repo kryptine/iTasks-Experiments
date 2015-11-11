@@ -26,7 +26,7 @@ instance == Exit where (==) e1 e2 =e1 === e2
 :: Weight      :== Int
 :: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
 
-infinity := 67108864
+infinity =: 67108864
 
 shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> Maybe ([Exit], Distance)
 shortestPath cost startRoomNumber endRoomNumber allRooms
