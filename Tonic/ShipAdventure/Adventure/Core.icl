@@ -33,17 +33,22 @@ shortestPath cost startRoomNumber endRoomNumber allRooms
   = reconstructSP (findSP cost (mkGraph allRooms) ('DH'.singleton (0, startRoomNumber))) endRoomNumber []
   where
   reconstructSP :: !(Graph r o a) !RoomNumber ![Exit] -> Maybe ([Exit], Distance)
-  reconstructSP graph currIdx path = reconstructSP` 0 graph currIdx path
+  reconstructSP graph currIdx path
+    = case 'DIS'.get currIdx graph of
+        Just (d, _, _) -> fmap (\x -> (x, d)) (reconstructSP` graph currIdx path)
+        _              -> Nothing
 
-  reconstructSP` :: !Int !(Graph r o a) !RoomNumber ![Exit] -> Maybe ([Exit], Distance)
-  reconstructSP` totalDist graph currIdx path
-    | currIdx == startRoomNumber = Just (path, totalDist)
+  reconstructSP` :: !(Graph r o a) !RoomNumber ![Exit] -> Maybe [Exit]
+  reconstructSP` graph currIdx path
+    | currIdx == startRoomNumber = Just path
     | otherwise = case 'DIS'.get currIdx graph of
-                    Just (d1, prevIdx, _) -> case 'DIS'.get prevIdx graph of
-                                              Just (d2, _, {exits}) -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
-                                                                        [] -> Nothing
-                                                                        [exit : _] -> reconstructSP` (totalDist + d1 + d2) graph prevIdx [exit : path]
-                                              _                    -> Nothing
+                    Just (_, prevIdx, _)
+                      -> case 'DIS'.get prevIdx graph of
+                           Just (_, _, {exits})
+                             -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
+                                  [] -> Nothing
+                                  [exit : _] -> reconstructSP` graph prevIdx [exit : path]
+                           _ -> Nothing
                     _ -> Nothing
 
   findSP :: !(r -> Weight) !(Graph r o a) !(Heap (Distance, NodeIdx)) -> Graph r o a
