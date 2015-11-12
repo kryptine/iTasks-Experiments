@@ -325,12 +325,14 @@ allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
 existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)
 
-pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) -> (Int, (RoomNumber, Int, Maybe ([Exit], Distance))) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
+pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) -> (Distance, Int, (RoomNumber, Distance, Maybe ([Exit], Distance))) | Eq o // returns: number of objects found, location of object, distance to object, shortest path to obejct
 pathToClosestObject sp kind actorLoc curMap
-  # spath = sortBy (\(_, i, _) (_, j, _) -> i < j) [case sp actorLoc objectLoc curMap of
-                                                      path=:(Just (_, dist)) -> (objectLoc, dist, path)
-                                                      _                      -> (-1, infinity, Nothing)
-                                                   \\ (objectLoc, found) <- findAllObjects curMap | found == kind ]
+  # spath = sortBy (\(_, i, _) (_, j, _) -> i < j)
+                   (filter (\(ol, l, p) -> ol >= 0)
+                           [case sp actorLoc objectLoc curMap of
+                              path=:(Just (_, dist)) -> (objectLoc, dist, path)
+                              _                      -> (-1, infinity, Nothing)
+                           \\ (objectLoc, found) <- findAllObjects curMap | found == kind ])
   = case spath of
-      [x=:(_, _, Just (path, _)) :_] -> (length path, x)
-      []                             -> (infinity, (-1, -1, Nothing))
+      [x=:(_, _, Just (path, _)) :_] -> (length path, length spath, x)
+      []                             -> (infinity, 0, (-1, -1, Nothing))

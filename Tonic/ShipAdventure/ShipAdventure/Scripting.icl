@@ -74,6 +74,6 @@ where
 
 
 	whereIs (Room nr) actorLoc curMap			= nr
-	whereIs (Nearest object) actorLoc curMap	= let (_,(objectLoc,_,_)) = shipPathToClosestObject object actorLoc curMap in objectLoc
+	whereIs (Nearest object) actorLoc curMap	= let (_,_,(objectLoc,_,_)) = shipPathToClosestObject object actorLoc curMap in objectLoc
 	whereIs TargetRoom actorLoc curMap		    = targetRoom
 
