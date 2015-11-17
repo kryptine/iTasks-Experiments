@@ -50,9 +50,13 @@ actorWithInstructions user
 
 // given the alarms one has to decide which tasks to assign to handle the situation
 
-spToDistString :: (Maybe ([Exit], Distance)) -> String
-spToDistString (Just (es, dist)) = toString (length es)
+spToDistString :: (Maybe [Exit]) -> String
+spToDistString (Just es) = toString (length es)
 spToDistString _                 = "Room unreachable!"
+
+spToDistString2 :: (Maybe ([Exit],Distance)) -> String
+spToDistString2 (Just (es,_)) = toString (length es)
+spToDistString2 _                 = "Room unreachable!"
 
 roomToString :: Int -> String
 roomToString n
@@ -95,10 +99,10 @@ giveInstructions =
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
-        # (_, nrExt, (extLoc, distExt, _))               = shipPathToClosestObject FireExtinguisher actorLoc curMap
-        # (_, nrBlankets, (blanketLoc, distBlankets, _)) = shipPathToClosestObject Blanket          actorLoc curMap
+        # (nrExt, (extLoc, distExt, _))               = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc curMap
+        # (nrBlankets, (blanketLoc, distBlankets, _)) = smartShipPathToClosestObject Blanket          actorLoc alarmLoc curMap
         = mkTable [ "Object Description", 										"Located in Room" , 		"Distance from " <+++ actor.userName]
-                  [ ("Fire Alarm !! " , 										roomToString alarmLoc, 		spToDistString (shipShortestPath actorLoc alarmLoc curMap))
+                  [ ("Fire Alarm !! " , 										roomToString alarmLoc, 		spToDistString2 (shipShortestPath actorLoc alarmLoc curMap))
                   , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)", 	roomToString extLoc, 		roomToString distExt)
                   , ("Closest Blanket ("	<+++ nrBlankets	<+++ " in reach)", 	roomToString blanketLoc,	roomToString distBlankets)
                   ]
@@ -107,15 +111,15 @@ giveInstructions =
       where
       mkView curMap
         = mkTable [ "Object Description", 									"Located in Room" , 		"Distance from " <+++ actor.userName]
-                  [ ("Smoke Alarm !! ",										roomToString alarmLoc, 		spToDistString (shipShortestPath actorLoc alarmLoc curMap))
+                  [ ("Smoke Alarm !! ",										roomToString alarmLoc, 		spToDistString2 (shipShortestPath actorLoc alarmLoc curMap))
                   ]
   viewRelativeStatus (actorLoc, actor) (alarmLoc, FloodDetector _)
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
-        # (_, nrPlugs, (plugLoc, distPlugs, _)) = shipPathToClosestObject Plug actorLoc curMap
+        # (nrPlugs, (plugLoc, distPlugs, _)) = smartShipPathToClosestObject Plug actorLoc alarmLoc curMap
         = mkTable [ "Object Description", 									"Located in Room", 			"Distance from " <+++ actor.userName]
-                  [ ("Flood Alarm !! ",										roomToString alarmLoc, 		spToDistString (shipShortestPath actorLoc alarmLoc curMap))
+                  [ ("Flood Alarm !! ",										roomToString alarmLoc, 		spToDistString2 (shipShortestPath actorLoc alarmLoc curMap))
                   , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", 		roomToString plugLoc,		roomToString distPlugs)
                   ]
 
@@ -146,13 +150,13 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
   taskToDo (alarmLoc,detector) curActor curRoom curMap
     = viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
       -||
-      (let path                                                    = shipShortestPath curRoom.number alarmLoc curMap
-           (_, nrExt, (extLoc, distExt, dirExt))                   = shipPathToClosestObject FireExtinguisher curRoom.number curMap
-           (_, nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = shipPathToClosestObject Blanket curRoom.number curMap
-           (_, nrPlugs, (plugLoc, distPlugs, dirPlug))             = shipPathToClosestObject Plug curRoom.number curMap
+      (let path                                                 = shipShortestPath curRoom.number alarmLoc curMap
+           (nrExt, (extLoc, distExt, dirExt))                   = smartShipPathToClosestObject FireExtinguisher curRoom.number alarmLoc curMap
+           (nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = smartShipPathToClosestObject Blanket curRoom.number alarmLoc curMap
+           (nrPlugs, (plugLoc, distPlugs, dirPlug))             = smartShipPathToClosestObject Plug curRoom.number alarmLoc curMap
       in viewInformation "" []
             (mkTable [ "Object Description", 								"Located in Room", 		"Distance from " <+++ curActor.userName, "Take Exit"]
-               [ (toString detector, 										roomToString alarmLoc, 	spToDistString path, 					goto path)
+               [ (toString detector, 										roomToString alarmLoc, 	spToDistString2 path, 					goto2 path)
                , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)", 	roomToString extLoc, 	roomToString distExt,					goto dirExt)
                , ("Closest Blanket ("	<+++ nrBlankets	<+++ " in reach)", 	roomToString blanketLoc,roomToString distBlankets,				goto dirBlanket)
                , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", 			roomToString plugLoc, 	roomToString distPlugs,					goto dirPlug)
@@ -202,9 +206,14 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
     giveUp          =   updStatusOfActor curActor.userName Available myMap
                     >>| return (Just "I gave up, send somebody else...")
 
-    goto Nothing         = "Unreachable!"
-    goto (Just ([], _))  = "you are in the target room"
-    goto (Just (dir, _)) = toString (hd dir)
+goto Nothing      = "Unreachable!"
+goto (Just []) 	  = "you are already in the target room"
+goto (Just (dir)) = toString (hd dir)
+
+goto2 Nothing      = "Unreachable!"
+goto2 (Just ([],_)) 	  = "you are already in the target room"
+goto2 (Just (dir,_)) = toString (hd dir)
+
 
 updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
@@ -265,23 +274,23 @@ findClosestObject :: RoomNumber (RoomNumber,Detector) MyMap -> (Maybe RoomNumber
 findClosestObject  myLoc (alarmLoc, detector) curMap
   = case detector of
       (SmokeDetector _) = (Just myLoc, Nothing)
-      (FloodDetector _) = case findClosest myLoc Plug curMap of
+      (FloodDetector _) = case findClosest myLoc alarmLoc Plug curMap of
                             Nothing -> (Nothing, Nothing)
-                            objLoc  -> (objLoc, Just Plug)
-      (FireDetector _)  = case (findClosest myLoc Blanket curMap, findClosest myLoc FireExtinguisher curMap) of
+                            objLoc  -> (Just (snd (fromJust objLoc)), Just Plug)
+      (FireDetector _)  = case (findClosest myLoc alarmLoc Blanket curMap, findClosest myLoc alarmLoc FireExtinguisher curMap) of
                             (Nothing, Nothing) -> (Nothing, Nothing)
-                            (Nothing, objLoc)  -> (objLoc, Just FireExtinguisher)
-                            (objLoc,  Nothing) -> (objLoc, Just Blanket)
-                            (objLoc1, objLoc2) -> if (fromJust objLoc1 < fromJust objLoc2)
-                                                    (objLoc1, Just Blanket)
-                                                    (objLoc2, Just FireExtinguisher)
+                            (Nothing, objLoc)  -> (Just (snd (fromJust objLoc)), Just FireExtinguisher)
+                            (objLoc,  Nothing) -> (Just (snd (fromJust objLoc)), Just Blanket)
+                            (objLoc1, objLoc2) -> if (fst (fromJust objLoc1) < fst (fromJust objLoc2))
+                                                    (Just (snd (fromJust objLoc1)), Just Blanket)
+                                                    (Just (snd (fromJust objLoc2)), Just FireExtinguisher)
 
-findClosest roomNumber object curMap
-  = case shipPathToClosestObject object roomNumber curMap of
-      (_, _, (_, _, Just (path, _)))
+findClosest myLoc targetLoc object curMap
+  = case smartShipPathToClosestObject object myLoc targetLoc curMap of
+      (_, (_, _, Just path))
         # revPath = reverse path
         | isEmpty revPath = Nothing
-        | otherwise       = Just (fromExit (hd revPath))
+        | otherwise       = Just (length path, fromExit (hd revPath))
       _ = Nothing
 
 mkRoom :: MyRoom -> Task ()
