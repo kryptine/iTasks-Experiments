@@ -281,16 +281,21 @@ findClosestObject  myLoc (alarmLoc, detector) curMap
                             (Nothing, Nothing) -> (Nothing, Nothing)
                             (Nothing, objLoc)  -> (Just (snd (fromJust objLoc)), Just FireExtinguisher)
                             (objLoc,  Nothing) -> (Just (snd (fromJust objLoc)), Just Blanket)
-                            (objLoc1, objLoc2) -> if (fst (fromJust objLoc1) < fst (fromJust objLoc2))
+                            (objLoc1, objLoc2) -> if (less (fromJust objLoc1) (fromJust objLoc2))
                                                     (Just (snd (fromJust objLoc1)), Just Blanket)
                                                     (Just (snd (fromJust objLoc2)), Just FireExtinguisher)
+where
+	less (d1,_) (d2,_)
+	| d1 >=0 && d2 >= 0 = d1<d2
+	| d2 >= 0 			= False
+	| otherwise 		= True
 
 findClosest myLoc targetLoc object curMap
   = case smartShipPathToClosestObject object myLoc targetLoc curMap of
-      (_, (_, _, Just path))
+      (_, (_, distance, Just path))
         # revPath = reverse path
         | isEmpty revPath = Nothing
-        | otherwise       = Just (length path, fromExit (hd revPath))
+        | otherwise       = Just (distance, fromExit (hd revPath))
       _ = Nothing
 
 mkRoom :: MyRoom -> Task ()

@@ -1,4 +1,4 @@
-implementation module Adventure.Core
+ implementation module Adventure.Core
  
 import StdArray
 import iTasks
@@ -345,20 +345,21 @@ smartPathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit]
 smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
 # foundObjects = [objectLoc \\ (objectLoc, found) <- findAllObjects curMap | found == objectKind ]
 | isEmpty foundObjects = (0, (-1, -1, Nothing))
-# spath = sortBy (\(i,_) (j,_) -> i < j)
-			(filter (\(d,(loc,dist,path)) -> isJust path)
-			[ let (oPath, oDistance)  = case spath actorLoc objectLoc curMap of
-											(Just (path,distance)) 	-> (Just path,distance)
-											_						-> (Nothing, infinity)
-				  (tPath, tDistance)	= case spath objectLoc targetLoc curMap of
-											(Just (path,distance)) 	-> (Just path,distance)
-											_						-> (Nothing, infinity)
-				
-			in (oDistance+tDistance, (objectLoc, oDistance, oPath))
-		  \\ objectLoc <- foundObjects
-		  ])
-= case spath of
-      [(_, x=:(_, _, Just (path))) :_] -> (length spath, x)
+# pathsFound = sortBy (\(i,_) (j,_) -> i < j)
+//# pathsFound = sortBy (\(_,(_, i, _)) (_,(_, j, _)) -> i < j)
+				(filter (\(d,(loc,dist,path)) -> isJust path)
+				[ let (oPath, oDistance)  = case spath actorLoc objectLoc curMap of
+												(Just (path,distance)) 	-> (Just path,distance)
+												_						-> (Nothing, infinity)
+					  (tPath, tDistance)	= case spath objectLoc targetLoc curMap of
+												(Just (path,distance)) 	-> (Just path,distance)
+												_						-> (Nothing, infinity)
+					
+				in (oDistance+tDistance, (objectLoc, oDistance, oPath))
+			  \\ objectLoc <- foundObjects | objectLoc <> targetLoc
+			  ])
+= case pathsFound of
+      [(_, x=:(_, _, Just (path))) :_] -> (length pathsFound, x)
       []                               -> (0, (-1, -1, Nothing))
      
       
