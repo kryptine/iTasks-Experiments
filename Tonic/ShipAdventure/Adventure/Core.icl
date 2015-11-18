@@ -326,6 +326,7 @@ existsRoom :: RoomNumber (MAP r o a) -> Bool
 existsRoom i map = isMember i (allRoomNumbers map)
 
 // returns: number of objects found, location of object, distance to object, shortest path to obejct
+
 pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) 
 					-> (Int, (RoomNumber, Distance, Maybe ([Exit], Distance))) | Eq o 
 pathToClosestObject sp kind actorLoc curMap
@@ -341,12 +342,11 @@ pathToClosestObject sp kind actorLoc curMap
       
 // returns: number of objects found, location of object, distance to object, shortest path to obejct
 smartPathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber RoomNumber (MAP r o a) 
-	-> (Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
+	-> (Int, Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
 smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
 # foundObjects = [objectLoc \\ (objectLoc, found) <- findAllObjects curMap | found == objectKind ]
-| isEmpty foundObjects = (0, (-1, -1, Nothing))
+| isEmpty foundObjects = (infinity,0, (-1, -1, Nothing))
 # pathsFound = sortBy (\(i,_) (j,_) -> i < j)
-//# pathsFound = sortBy (\(_,(_, i, _)) (_,(_, j, _)) -> i < j)
 				(filter (\(d,(loc,dist,path)) -> isJust path)
 				[ let (oPath, oDistance)  = case spath actorLoc objectLoc curMap of
 												(Just (path,distance)) 	-> (Just path,distance)
@@ -359,8 +359,8 @@ smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
 			  \\ objectLoc <- foundObjects | objectLoc <> targetLoc
 			  ])
 = case pathsFound of
-      [(_, x=:(_, _, Just (path))) :_] -> (length pathsFound, x)
-      []                               -> (0, (-1, -1, Nothing))
+      [(cost, x=:(_, _, Just path)) :_] -> (cost,length pathsFound, x)
+      []                                -> (infinity, 0, (-1, -1, Nothing))
      
       
       

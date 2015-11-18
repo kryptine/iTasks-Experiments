@@ -91,11 +91,11 @@ dropDownObject 	:: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | 
 
 // given a shortest path algorithm, the current location and the kind of object one searches for
 // returns: number of objects found, location of the closest object, distance to that object, shortest path to that object
-pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) 
-															-> (Int, (RoomNumber, Distance, Maybe ([Exit], Distance))) | Eq o 
+//pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) 
+//															-> (Int, (RoomNumber, Distance, Maybe ([Exit], Distance))) | Eq o 
 															
 // given a shortest path algorithm, the current location, the kind of object one searches for, and the destination where the object has to be taken to
 // returns: number of objects found, location of the closest object, distance to that object, shortest path to that object
 smartPathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber RoomNumber (MAP r o a) 
-															-> (Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
+															-> (Int, Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
 

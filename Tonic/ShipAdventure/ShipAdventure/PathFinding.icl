@@ -4,10 +4,10 @@ import Adventure.Core
 import ShipAdventure.Types
 
 // returns: distance, number of objects found, location of object, distance to object, shortest path to obejct
-shipPathToClosestObject :: Object RoomNumber MyMap -> (Int,(RoomNumber,Distance, Maybe ([Exit], Distance)))  
-shipPathToClosestObject kind actorLoc curMap = pathToClosestObject shipShortestPath kind actorLoc curMap
+//shipPathToClosestObject :: Object RoomNumber MyMap -> (Int,(RoomNumber,Distance, Maybe ([Exit], Distance)))  
+//shipPathToClosestObject kind actorLoc curMap = pathToClosestObject shipShortestPath kind actorLoc curMap
 
-smartShipPathToClosestObject :: Object RoomNumber RoomNumber MyMap -> (Int,(RoomNumber,Distance, Maybe [Exit])) 
+smartShipPathToClosestObject :: Object RoomNumber RoomNumber MyMap -> (Int,Int,(RoomNumber,Distance, Maybe [Exit])) 
 smartShipPathToClosestObject kind actorLoc targetLoc curMap = smartPathToClosestObject shipShortestPath kind actorLoc targetLoc curMap
 
 
