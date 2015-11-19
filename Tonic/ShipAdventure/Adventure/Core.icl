@@ -342,10 +342,10 @@ pathToClosestObject sp kind actorLoc curMap
 
 // returns: number of objects found, location of object, distance to object, shortest path to obejct
 smartPathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber RoomNumber (MAP r o a) 
-	-> (Distance, Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
+	-> (Int, Distance, Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
 smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
   # foundObjects = [objectLoc \\ (objectLoc, found) <- findAllObjects curMap | found == objectKind ]
-  | isEmpty foundObjects = (infinity, 0, (-1, -1, Nothing))
+  | isEmpty foundObjects = (infinity, infinity, 0, (-1, -1, Nothing))
   # pathsFound = sortBy (\(i, _, _) (j, _, _) -> i < j)
                         (filter (\(d, _, (loc, dist, path)) -> isJust path)
                         [ let (oPath, oDistance) = case spath actorLoc objectLoc curMap of
@@ -361,5 +361,5 @@ smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
                         \\ objectLoc <- foundObjects | objectLoc <> targetLoc
                         ])
   = case pathsFound of
-      [(_, totalDist, x=:(_, _, Just path)) :_] -> (totalDist, length pathsFound, x)
-      []                                        -> (infinity, -1, (-1, -1, Nothing))
+      [(cost, totalDist, x=:(_, _, Just path)) :_] -> (cost, totalDist, length pathsFound, x)
+      []                                           -> (infinity, infinity, -1, (-1, -1, Nothing))

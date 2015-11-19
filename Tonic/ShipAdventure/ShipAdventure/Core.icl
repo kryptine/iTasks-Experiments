@@ -99,8 +99,8 @@ giveInstructions =
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
-        # (eCost,nrExt, (extLoc, distExt, _))               = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc curMap
-        # (bCost,nrBlankets, (blanketLoc, distBlankets, _)) = smartShipPathToClosestObject Blanket          actorLoc alarmLoc curMap
+        # (_,eCost,nrExt, (extLoc, distExt, _))               = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc curMap
+        # (_,bCost,nrBlankets, (blanketLoc, distBlankets, _)) = smartShipPathToClosestObject Blanket          actorLoc alarmLoc curMap
         # fireDist                                          = spToDistString2 (shipShortestPath actorLoc alarmLoc curMap)
         = mkTable [ "Object Description",                                   "Located in Room" ,      "Distance from " <+++ actor.userName, "Route length"]
                   [ ("Fire Alarm !! " ,                                     roomToString alarmLoc,   fireDist,                             fireDist)
@@ -118,7 +118,7 @@ giveInstructions =
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
-        # (pCost,nrPlugs, (plugLoc, distPlugs, _)) = smartShipPathToClosestObject Plug actorLoc alarmLoc curMap
+        # (_,pCost,nrPlugs, (plugLoc, distPlugs, _)) = smartShipPathToClosestObject Plug actorLoc alarmLoc curMap
         = mkTable [ "Object Description",                             "Located in Room",     "Distance from " <+++ actor.userName]
                   [ ("Flood Alarm !! ",                               roomToString alarmLoc, spToDistString2 (shipShortestPath actorLoc alarmLoc curMap), "Route length")
                   , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", roomToString plugLoc,  roomToString distPlugs,                                      toString pCost)
@@ -152,9 +152,9 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
     = viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
       -||
       (let path                                                 = shipShortestPath curRoom.number alarmLoc curMap
-           (_,nrExt, (extLoc, distExt, dirExt))                   = smartShipPathToClosestObject FireExtinguisher curRoom.number alarmLoc curMap
-           (_,nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = smartShipPathToClosestObject Blanket curRoom.number alarmLoc curMap
-           (_,nrPlugs, (plugLoc, distPlugs, dirPlug))             = smartShipPathToClosestObject Plug curRoom.number alarmLoc curMap
+           (_,_,nrExt, (extLoc, distExt, dirExt))               = smartShipPathToClosestObject FireExtinguisher curRoom.number alarmLoc curMap
+           (_,_,nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = smartShipPathToClosestObject Blanket curRoom.number alarmLoc curMap
+           (_,_,nrPlugs, (plugLoc, distPlugs, dirPlug))             = smartShipPathToClosestObject Plug curRoom.number alarmLoc curMap
       in viewInformation "" []
             (mkTable [ "Object Description", 								"Located in Room", 		"Distance from " <+++ curActor.userName, "Take Exit"]
                [ (toString detector, 										roomToString alarmLoc, 	spToDistString2 path, 					goto2 path)
@@ -310,7 +310,7 @@ from StdMisc import abort
 findClosest :: RoomNumber RoomNumber Object MyMap -> Maybe (Int, RoomNumber)
 findClosest myLoc targetLoc object curMap
   = case smartShipPathToClosestObject object myLoc targetLoc curMap of
-      (cost,_, (_, distance, Just path))
+      (cost,_,_, (_, distance, Just path))
         = case reverse path of
             []    -> Just (cost, myLoc)
             [x:_] -> Just (cost, fromExit x)
