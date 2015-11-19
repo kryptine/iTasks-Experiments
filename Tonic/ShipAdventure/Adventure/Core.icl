@@ -338,29 +338,25 @@ pathToClosestObject sp kind actorLoc curMap
                            \\ (objectLoc, found) <- findAllObjects curMap | found == kind ])
   = case spath of
       [x=:(_, _, Just (path, _)) :_] -> (length spath, x)
-      []                             -> (0, (-1, -1, Nothing))
-      
+      []                             -> (-1, (-1, -1, Nothing))
+
 // returns: number of objects found, location of object, distance to object, shortest path to obejct
 smartPathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber RoomNumber (MAP r o a) 
 	-> (Int, Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
 smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
-# foundObjects = [objectLoc \\ (objectLoc, found) <- findAllObjects curMap | found == objectKind ]
-| isEmpty foundObjects = (infinity,0, (-1, -1, Nothing))
-# pathsFound = sortBy (\(i,_) (j,_) -> i < j)
-				(filter (\(d,(loc,dist,path)) -> isJust path)
-				[ let (oPath, oDistance)  = case spath actorLoc objectLoc curMap of
-												(Just (path,distance)) 	-> (Just path,distance)
-												_						-> (Nothing, infinity)
-					  (tPath, tDistance)	= case spath objectLoc targetLoc curMap of
-												(Just (path,distance)) 	-> (Just path,distance)
-												_						-> (Nothing, infinity)
-					
-				in (oDistance+tDistance, (objectLoc, oDistance, oPath))
-			  \\ objectLoc <- foundObjects | objectLoc <> targetLoc
-			  ])
-= case pathsFound of
-      [(cost, x=:(_, _, Just path)) :_] -> (cost,length pathsFound, x)
-      []                                -> (infinity, 0, (-1, -1, Nothing))
-     
-      
-      
+  # foundObjects = [objectLoc \\ (objectLoc, found) <- findAllObjects curMap | found == objectKind ]
+  | isEmpty foundObjects = (infinity, 0, (-1, -1, Nothing))
+  # pathsFound = sortBy (\(i, _) (j, _) -> i < j)
+                        (filter (\(d, (loc, dist, path)) -> isJust path)
+                        [ let (oPath, oDistance) = case spath actorLoc objectLoc curMap of
+                                                     (Just (path, distance)) -> (Just path, distance)
+                                                     _                       -> (Nothing, infinity)
+                              (tPath, tDistance) = case spath objectLoc targetLoc curMap of
+                                                     (Just (path, distance)) -> (Just path, distance)
+                                                     _                       -> (Nothing, infinity)
+                          in (oDistance + tDistance, (objectLoc, oDistance, oPath))
+                        \\ objectLoc <- foundObjects | objectLoc <> targetLoc
+                        ])
+  = case pathsFound of
+      [(cost, x=:(_, _, Just path)) :_] -> (cost, length pathsFound, x)
+      []                                -> (infinity, -1, (-1, -1, Nothing))

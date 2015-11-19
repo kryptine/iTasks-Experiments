@@ -306,12 +306,13 @@ where
 	
 from StdMisc import abort
 
+findClosest :: RoomNumber RoomNumber Object MyMap -> Maybe (Int, RoomNumber)
 findClosest myLoc targetLoc object curMap
   = case smartShipPathToClosestObject object myLoc targetLoc curMap of
       (cost,_, (_, distance, Just path))
-        # revPath = reverse path
-        | isEmpty revPath = Nothing
-        | otherwise       = Just (cost, fromExit (hd revPath))
+        = case reverse path of
+            []    -> Just (cost, myLoc)
+            [x:_] -> Just (cost, fromExit x)
       _ = Nothing
 
 mkRoom :: MyRoom -> Task ()
