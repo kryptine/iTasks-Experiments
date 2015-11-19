@@ -24,11 +24,33 @@ import ShipAdventure.PathFinding
 
 derive class iTask Target, Script, Condition
 
-myScript :: Shared [Script]
-myScript = sharedStore "myScript" []
+handleFireScript :: Shared [Script]
+handleFireScript = sharedStore "handleFireScript" []
 
-mkScript :: Task [Script]
-mkScript = updateSharedInformation "my script" [] myScript
+handleFloodScript :: Shared [Script]
+handleFloodScript = sharedStore "handleFloodScript" []
+
+handleSmokeScript :: Shared [Script]
+handleSmokeScript = sharedStore "handleSmokeScript" []
+
+changeFireScript :: Task ()
+changeFireScript = changeScript "Handling Fire" handleFireScript 
+
+changeFloodScript :: Task ()
+changeFloodScript = changeScript "Handling Flood" handleFloodScript 
+
+changeSmokeScript :: Task ()
+changeSmokeScript = changeScript "Handling Smoke" handleSmokeScript 
+
+changeScript :: String (Shared [Script]) -> Task ()
+changeScript prompt script
+	=	viewSharedInformation ("Current Script: " <+++ prompt) [ViewWith (map (\e -> toSingleLineText e))] script
+	>>*	[OnAction (Action "Fine" []) (always (return ()))
+		,OnAction (Action "Change" []) (always (	updateSharedInformation ("Change Script: " <+++ prompt) [] script 
+												>>| changeScript prompt script
+												))
+		]
+
 
 interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
 interperScript (targetRoom,detector) user script
