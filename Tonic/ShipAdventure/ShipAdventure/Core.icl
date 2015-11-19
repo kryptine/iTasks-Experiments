@@ -22,7 +22,9 @@ mkTable	headers a = Table headers (map row a) Nothing
 myTasks :: [Workflow]
 myTasks = [ workflow "walk around"  "enter map, walk around, follow instructions of commander" currentUserWalkAround
           , workflow "commander"    "give instructions to crew members on the map"             giveInstructions
-          , workflow "alter script" "define your own simulation"                               mkScript
+          , workflow "alter fire script" "define your own script for handling fires"           changeFireScript
+          , workflow "alter flood script" "define your own script for handling floods"          changeFloodScript
+          , workflow "alter smoke script" "define your own script for handling smoke"           changeSmokeScript
           ]
 
 currentUserWalkAround :: Task ()
@@ -101,7 +103,7 @@ giveInstructions =
       mkView curMap
         # (_,eCost,nrExt, (extLoc, distExt, _))               = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc curMap
         # (_,bCost,nrBlankets, (blanketLoc, distBlankets, _)) = smartShipPathToClosestObject Blanket          actorLoc alarmLoc curMap
-        # fireDist                                          = spToDistString2 (shipShortestPath actorLoc alarmLoc curMap)
+        # fireDist                                            = spToDistString2 (shipShortestPath actorLoc alarmLoc curMap)
         = mkTable [ "Object Description",                                   "Located in Room" ,      "Distance from " <+++ actor.userName, "Route length"]
                   [ ("Fire Alarm !! " ,                                     roomToString alarmLoc,   fireDist,                             fireDist)
                   , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)", roomToString extLoc,     roomToString distExt,                 toString eCost)
@@ -123,8 +125,6 @@ giveInstructions =
                   [ ("Flood Alarm !! ",                               roomToString alarmLoc, spToDistString2 (shipShortestPath actorLoc alarmLoc curMap), "Route length")
                   , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", roomToString plugLoc,  roomToString distPlugs,                                      toString pCost)
                   ]
-
-
 
 handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
   =   updStatusOfActor actor.userName Busy myMap
@@ -223,7 +223,10 @@ updStatusOfActor user availability smap
 
 autoHandleWithScript :: (User,(RoomNumber,Detector),(RoomNumber,MyActor),Priority) -> Task ()
 autoHandleWithScript  (commander,(alarmLoc,detector),(actorLoc,actor),prio)
-  =              get myScript
+  =              case detector of
+  					(FireDetector   _) -> get handleFireScript
+  					(FloodDetector  _) -> get handleFloodScript
+  					(SmokeDetector  _) -> get handleSmokeScript
   >>= \script -> appendTopLevelTaskPrioFor actor.userName ("Auto script " <+++ toString detector <+++ " in room " <+++ alarmLoc) "High" True 
                  (   updStatusOfActor actor.userName  Busy myMap 
                  >>| addLog ("Commander " <+++ commander) actor.userName ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
@@ -282,19 +285,9 @@ findClosestObject  myLoc (alarmLoc, detector) curMap
       (FloodDetector _) = case findClosest myLoc alarmLoc Plug curMap of
                             Nothing -> (Nothing, Nothing)
                             objLoc  -> (Just (snd (fromJust objLoc)), Just Plug)
-/*      (FireDetector _)  = case (findClosest myLoc alarmLoc Blanket curMap, findClosest myLoc alarmLoc FireExtinguisher curMap) of
-                            (Nothing, Nothing) 		-> (Nothing, Nothing)
-                            (Nothing, locFire)  	-> (Just (snd (fromJust locFire)), Just FireExtinguisher)
-                            (locBlanket,  Nothing)	-> (Just (snd (fromJust locBlanket)), Just Blanket)
-                            (objLoc1, objLoc2) 		-> if (less (fromJust objLoc1) (fromJust objLoc2))
-                                                    		(Just (snd (fromJust objLoc1)), Just Blanket)
-                                                    		(Just (snd (fromJust objLoc2)), Just FireExtinguisher)
-*/
       (FireDetector _)  
       # fireLoc 	= findClosest myLoc alarmLoc FireExtinguisher curMap
-//	  | isNothing fireLoc = abort "cannot find fire ext"	
       # blanketLoc 	= findClosest myLoc alarmLoc Blanket curMap
-//	  | isNothing blanketLoc = abort "cannot find bankets"	
 	  | isNothing fireLoc && isNothing blanketLoc 	= (Nothing,Nothing)
 	  | isNothing blanketLoc 						= (Just (snd (fromJust fireLoc)), Just FireExtinguisher)
 	  | isNothing fireLoc 							= (Just (snd (fromJust blanketLoc)), Just Blanket)

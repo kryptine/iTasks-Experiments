@@ -24,9 +24,13 @@ import ShipAdventure.Types
 
 derive class iTask Target, Script, Condition
 
-myScript :: Shared [Script]
+handleFireScript 	:: Shared [Script]
+handleFloodScript 	:: Shared [Script]
+handleSmokeScript 	:: Shared [Script]
 
-mkScript :: Task [Script]
+changeFireScript	:: Task ()
+changeFloodScript 	:: Task ()
+changeSmokeScript 	:: Task ()
 
-interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
+interperScript 		::  (RoomNumber,Detector) User [Script] -> Task Bool
 
