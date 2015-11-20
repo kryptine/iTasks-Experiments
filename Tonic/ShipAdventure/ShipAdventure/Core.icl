@@ -248,13 +248,19 @@ startSimulation commander user (alarmLoc,detector)
   >>= \curMap -> let  (myLoc,curActor)       = fromJust (findUser user curMap) 						
                       (mbObjectLoc,mbObject) = findClosestObject myLoc (alarmLoc,detector) curMap		
                  in if (isNothing mbObjectLoc)
-                      (return False)
-                      if (isNothing mbObject)
-                        (simulateHandling myLoc alarmLoc detector curActor myMap)
-                        (simulateHandlingWithObject myLoc (fromJust mbObject) (fromJust mbObjectLoc) alarmLoc detector curActor myMap) 
-  >>= \succes -> updStatusOfActor user Available myMap 
-  >>|            addLog user commander  ("Simulation Handling " <+++ toString detector <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
-  >>|            return True
+                      (endSimulation False)
+                      (		(if (isNothing mbObject)
+                       		 	(simulateHandling myLoc alarmLoc detector curActor myMap)
+                        		(simulateHandlingWithObject myLoc (fromJust mbObject) (fromJust mbObjectLoc) alarmLoc detector curActor myMap) 
+                        	)
+  					  >>|	endSimulation True
+  					  )
+where  
+	endSimulation ok
+	  =				 updStatusOfActor user Available myMap 
+	  >>|            addLog user commander  ("Simulation Handling " <+++ toString detector <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
+	  >>|            return ok
+
 
 simulateHandling startLoc alarmLoc detector actor smap
   =                     autoMove startLoc alarmLoc shipShortestPath actor smap
