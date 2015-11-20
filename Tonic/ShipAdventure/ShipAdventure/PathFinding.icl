@@ -7,7 +7,7 @@ import ShipAdventure.Types
 //shipPathToClosestObject :: Object RoomNumber MyMap -> (Int,(RoomNumber,Distance, Maybe ([Exit], Distance)))  
 //shipPathToClosestObject kind actorLoc curMap = pathToClosestObject shipShortestPath kind actorLoc curMap
 
-smartShipPathToClosestObject :: Object RoomNumber RoomNumber MyMap -> (Int,Int,(RoomNumber,Distance, Maybe [Exit])) 
+smartShipPathToClosestObject :: Object RoomNumber RoomNumber MyMap -> (Int,Distance, Int,(RoomNumber,Distance, Maybe [Exit])) 
 smartShipPathToClosestObject kind actorLoc targetLoc curMap = smartPathToClosestObject shipShortestPath kind actorLoc targetLoc curMap
 
 
