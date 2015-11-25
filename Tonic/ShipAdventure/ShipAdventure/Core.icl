@@ -72,14 +72,16 @@ giveInstructions =
   (          get currentUser
   >>= \me -> (                        enterChoiceWithShared "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] allActiveAlarms
              >&>                      withSelection (viewInformation () [] "No Alarm Selected")
-             \(alarmLoc, detector) -> selectSomeOneToHandle (alarmLoc, detector)
+             \(alarmLoc, detector) -> scriptDefined detector
+             >>= \scriptExists ->	  selectSomeOneToHandle (alarmLoc, detector)
              >&>                      withSelection (viewInformation () [] "No Crew Member Selected")
              \(actorLoc, actor) ->    viewRelativeStatus (actorLoc, actor) (alarmLoc, detector)
                                       ||-
                                       updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
              >>* [ OnAction ActionByHand    (hasValue (\prio -> handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), prio)))
                  , OnAction ActionSimulated (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc, detector) @! ()))
-                 , OnAction ActionScript    (hasValue (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
+//                 , OnAction ActionScript    (hasValue (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
+                 , OnAction ActionScript    (ifValue (\_ -> scriptExists) (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
                  , OnAction ActionCancel    (always (return ()))
                  ]
             )
@@ -222,6 +224,13 @@ updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
   =   updActorStatus user (\st -> {st & occupied = availability}) smap
   >>| addLog user "" ("Has become " <+++ availability)
+
+scriptDefined :: Detector -> Task Bool
+scriptDefined  detector
+= case detector of
+  	(FireDetector   _) -> get handleFireScript  >>= \script -> return (length script > 0)
+  	(FloodDetector  _) -> get handleFloodScript >>= \script -> return (length script > 0)
+  	(SmokeDetector  _) -> get handleSmokeScript >>= \script -> return (length script > 0)
 
 autoHandleWithScript :: (User,(RoomNumber,Detector),(RoomNumber,MyActor),Priority) -> Task ()
 autoHandleWithScript  (commander,(alarmLoc,detector),(actorLoc,actor),prio)
