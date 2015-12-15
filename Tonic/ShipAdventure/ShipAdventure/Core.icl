@@ -72,14 +72,16 @@ giveInstructions =
   (          get currentUser
   >>= \me -> (                        enterChoiceWithShared "Choose which Alarm to handle : " [ChooseWith (ChooseFromRadioButtons showAlarm)] allActiveAlarms
              >&>                      withSelection (viewInformation () [] "No Alarm Selected")
-             \(alarmLoc, detector) -> selectSomeOneToHandle (alarmLoc, detector)
+             \(alarmLoc, detector) -> scriptDefined detector
+             >>= \scriptExists ->	  selectSomeOneToHandle (alarmLoc, detector)
              >&>                      withSelection (viewInformation () [] "No Crew Member Selected")
              \(actorLoc, actor) ->    viewRelativeStatus (actorLoc, actor) (alarmLoc, detector)
                                       ||-
                                       updateChoice "Select the Priority : " [ChooseWith (ChooseFromRadioButtons id)] [Low, Normal, High, Highest] High
              >>* [ OnAction ActionByHand    (hasValue (\prio -> handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), prio)))
                  , OnAction ActionSimulated (hasValue (\prio -> autoHandleAlarm me actor.userName (alarmLoc, detector) @! ()))
-                 , OnAction ActionScript    (hasValue (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
+//                 , OnAction ActionScript    (hasValue (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
+                 , OnAction ActionScript    (ifValue (\_ -> scriptExists) (\prio -> autoHandleWithScript (me, (alarmLoc, detector), (actorLoc, actor), prio) @! ()))
                  , OnAction ActionCancel    (always (return ()))
                  ]
             )
@@ -103,9 +105,9 @@ giveInstructions =
       mkView curMap
         # (_,eCost,nrExt, (extLoc, distExt, _))               = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc curMap
         # (_,bCost,nrBlankets, (blanketLoc, distBlankets, _)) = smartShipPathToClosestObject Blanket          actorLoc alarmLoc curMap
-        # fireDist                                            = spToDistString2 (shipShortestPath actorLoc alarmLoc curMap)
-        = mkTable [ "Object Description",                                   "Located in Room" ,      "Distance from " <+++ actor.userName, "Route length"]
-                  [ ("Fire Alarm !! " ,                                     roomToString alarmLoc,   fireDist,                             fireDist)
+        # fireDist                                            = shipShortestPath actorLoc alarmLoc curMap
+        = mkTable [ "Object Description",                                   "Located in Room" ,      "Distance from " <+++ actor.userName, "Route Length"]
+                  [ ("Fire Alarm !! " ,                                     roomToString alarmLoc,   spToDistString2 fireDist,              spToDistString2 fireDist)
                   , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)", roomToString extLoc,     roomToString distExt,                 toString eCost)
                   , ("Closest Blanket (" <+++ nrBlankets <+++ " in reach)", roomToString blanketLoc, roomToString distBlankets,            toString bCost)
                   ]
@@ -113,17 +115,19 @@ giveInstructions =
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
-        = mkTable [ "Object Description", "Located in Room",     "Distance from " <+++ actor.userName]
-                  [ ("Smoke Alarm !! ",   roomToString alarmLoc, spToDistString2 (shipShortestPath actorLoc alarmLoc curMap))
+        # distance = shipShortestPath actorLoc alarmLoc curMap
+        = mkTable [ "Object Description", "Located in Room",     "Distance from " <+++ actor.userName, "Route Length"]
+                  [ ("Smoke Alarm !! ",   roomToString alarmLoc, spToDistString2 distance, spToDistString2 distance )
                   ]
   viewRelativeStatus (actorLoc, actor) (alarmLoc, FloodDetector _)
       = viewSharedInformation () [ViewWith mkView] myMap @! ()
       where
       mkView curMap
         # (_,pCost,nrPlugs, (plugLoc, distPlugs, _)) = smartShipPathToClosestObject Plug actorLoc alarmLoc curMap
-        = mkTable [ "Object Description",                             "Located in Room",     "Distance from " <+++ actor.userName]
-                  [ ("Flood Alarm !! ",                               roomToString alarmLoc, spToDistString2 (shipShortestPath actorLoc alarmLoc curMap), "Route length")
-                  , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", roomToString plugLoc,  roomToString distPlugs,                                      toString pCost)
+		# floodDist									 = shipShortestPath actorLoc alarmLoc curMap
+        = mkTable [ "Object Description",                             "Located in Room",     "Distance from " <+++ actor.userName, "Route Length"]
+                  [ ("Flood Alarm !! ",                               roomToString alarmLoc, spToDistString2 floodDist, 			spToDistString2 floodDist)
+                  , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", roomToString plugLoc,  roomToString distPlugs,                toString pCost)
                   ]
 
 handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
@@ -151,16 +155,16 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
   taskToDo (alarmLoc,detector) curActor curRoom curMap
     = viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
       -||
-      (let path                                                 = shipShortestPath curRoom.number alarmLoc curMap
-           (_,_,nrExt, (extLoc, distExt, dirExt))               = smartShipPathToClosestObject FireExtinguisher curRoom.number alarmLoc curMap
-           (_,_,nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = smartShipPathToClosestObject Blanket curRoom.number alarmLoc curMap
-           (_,_,nrPlugs, (plugLoc, distPlugs, dirPlug))             = smartShipPathToClosestObject Plug curRoom.number alarmLoc curMap
+      (let path                                                 		= shipShortestPath curRoom.number alarmLoc curMap
+           (_,eCost,nrExt, (extLoc, distExt, dirExt))               	= smartShipPathToClosestObject FireExtinguisher curRoom.number alarmLoc curMap
+           (_,bCost,nrBlankets, (blanketLoc, distBlankets, dirBlanket)) = smartShipPathToClosestObject Blanket curRoom.number alarmLoc curMap
+           (_,pCost,nrPlugs, (plugLoc, distPlugs, dirPlug))             = smartShipPathToClosestObject Plug curRoom.number alarmLoc curMap
       in viewInformation "" []
-            (mkTable [ "Object Description", 								"Located in Room", 		"Distance from " <+++ curActor.userName, "Take Exit"]
-               [ (toString detector, 										roomToString alarmLoc, 	spToDistString2 path, 					goto2 path)
-               , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)", 	roomToString extLoc, 	roomToString distExt,					goto dirExt)
-               , ("Closest Blanket ("	<+++ nrBlankets	<+++ " in reach)", 	roomToString blanketLoc,roomToString distBlankets,				goto dirBlanket)
-               , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", 			roomToString plugLoc, 	roomToString distPlugs,					goto dirPlug)
+            (mkTable [ "Object Description", 								"Located in Room", 		"Take Exit", 	"Distance from " <+++ curActor.userName, "Route Length"]
+               [ (toString detector, 										roomToString alarmLoc, 	goto2 path,		spToDistString2 path, 					spToDistString2 path)
+               , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)", 	roomToString extLoc, 	goto dirExt,	roomToString distExt,					toString eCost)
+               , ("Closest Blanket ("	<+++ nrBlankets	<+++ " in reach)", 	roomToString blanketLoc,goto dirBlanket,roomToString distBlankets,				toString bCost)
+               , ("Closest plug (" <+++ nrPlugs <+++ " in reach)", 			roomToString plugLoc, 	goto dirPlug,	roomToString distPlugs,					toString pCost)
                ])) @! ()
       >>* [ OnAction (Action "Use Fire Extinguisher" []) (ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
           , OnAction (Action "Use Blanket" [])           (ifCond (mayUseBlanket detector)      (return (Just useBlanket)))
@@ -220,6 +224,13 @@ updStatusOfActor :: User Availability (Shared MyMap) -> Task ()
 updStatusOfActor user availability smap
   =   updActorStatus user (\st -> {st & occupied = availability}) smap
   >>| addLog user "" ("Has become " <+++ availability)
+
+scriptDefined :: Detector -> Task Bool
+scriptDefined  detector
+= case detector of
+  	(FireDetector   _) -> get handleFireScript  >>= \script -> return (length script > 0)
+  	(FloodDetector  _) -> get handleFloodScript >>= \script -> return (length script > 0)
+  	(SmokeDetector  _) -> get handleSmokeScript >>= \script -> return (length script > 0)
 
 autoHandleWithScript :: (User,(RoomNumber,Detector),(RoomNumber,MyActor),Priority) -> Task ()
 autoHandleWithScript  (commander,(alarmLoc,detector),(actorLoc,actor),prio)
