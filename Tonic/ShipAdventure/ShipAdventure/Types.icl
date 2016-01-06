@@ -75,7 +75,7 @@ setRoomDetectors
 setAlarm :: User (RoomNumber,Detector) Bool (Shared MyMap) -> Task ()
 setAlarm user (alarmLoc,detector) bool smap
 	= 		updRoomStatus alarmLoc (updDetector (if bool setDetector resetDetector) detector) smap
-	>>|		addLog user alarmLoc  ("Resets " <+++ detector <+++ " to False.") 
+	>>|		addLog user ""  ("Resets " <+++ detector <+++ " in Room " <+++ alarmLoc <+++ " to False.") 
 
 //
 

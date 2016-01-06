@@ -15,7 +15,7 @@ addLog who location about
 
 showLog :: Task [Log]
 showLog
-	=				viewSharedInformation "Latest 10 loggings..." [ViewWith (take 10)] myLog
+	=				viewSharedInformation "Loggings..." [] myLog
 
 
 

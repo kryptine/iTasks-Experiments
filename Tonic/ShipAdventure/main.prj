@@ -36,9 +36,9 @@ Global
 		GenerateDLL:	False
 		ExportedNames:	
 	Paths
-		Path:	{Project}
 		Path:	{Project}\Adventure
 		Path:	{Project}\ShipAdventure
+		Path:	{Project}
 	Precompile:	
 	Postlink:	
 MainModule
@@ -2759,6 +2759,20 @@ OtherModules
 			Fusion:	False
 	Module
 		Name:	iTasks._Framework.Tonic.Pretty
+		Dir:	{Application}\iTasks-SDK\Server
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	NoTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
+		Name:	iTasks._Framework.Tonic.Server
 		Dir:	{Application}\iTasks-SDK\Server
 		Compiler
 			NeverMemoryProfile:	False

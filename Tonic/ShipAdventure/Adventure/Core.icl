@@ -10,6 +10,8 @@ from Data.IntMap.Strict import :: IntMap
 import qualified Data.Heap as DH
 from Data.Heap import :: Heap
 
+from Adventure.Logging import addLog
+
 import StdMisc
 
 
@@ -182,6 +184,7 @@ autoMove thisRoom target pathFun actor smap
 						    # nextRoom = fromExit (hd path)
 							=     waitForTimer  {Time | hour = 0, min = 0, sec = delay}
 							  >>| move room.number nextRoom nactor smap
+							  >>| addLog nactor.userName "" ("Has moved to Room " <+++ nextRoom)
 					 		  >>| waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
 					 		  >>| autoMove nextRoom target pathFun nactor smap
                           _ = return False
