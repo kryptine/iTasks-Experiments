@@ -2,10 +2,12 @@ definition module ShipAdventure.Types
  
 import Adventure.Core
 
-:: MyMap		:== MAP 	RoomStatus Object ActorStatus
-:: MyActor		:== Actor 	Object ActorStatus
-:: MyFloor		:== Floor 	RoomStatus Object ActorStatus
-:: MyRoom		:== Room 	RoomStatus Object ActorStatus
+:: MyActor  :== Actor ObjectType ActorStatus
+:: MyObject :== Object ObjectType
+
+:: MyRoomStatusMap    :== RoomStatusMap RoomStatus
+:: MyRoomInventoryMap :== RoomInventoryMap ObjectType
+:: MyRoomActorMap     :== RoomActorMap ObjectType ActorStatus
 
 :: MapClick     = NoMapClick
                 | SelectRoom RoomNumber
@@ -16,34 +18,58 @@ import Adventure.Core
 :: Detector		= 	FireDetector Bool 
 				| 	SmokeDetector Bool
                 | 	FloodDetector Bool
-:: Object 		= 	FireExtinguisher
-				| 	Blanket
+
+
+:: ObjectType	= 	FireExtinguisher
+				| 	FireBlanket
 				| 	Plug
+				| 	Radar
+				| 	PowerGen
+				| 	CoolingPump
+
 :: ActorStatus	= 	{ occupied	:: Availability
 					}
 :: Availability	=	Available | NotAvailable | Busy  
 :: Priority		=	Low | Normal | High | Highest
 
-derive class iTask Detector, Object, ActorStatus, Availability, Priority, MapClick
+// cableId and inRoom together form pri-key for Cable
+:: Cable =
+  { cableId    :: Int
+  , inRoom     :: RoomNumber
+  , connectsTo :: CableConnection
+  }
 
-instance 	== 			Object     
-instance 	== 			Priority   
+:: CableConnection
+  = RoomConn RoomNumber
+  | DeviceConn Int
 
-instance	toString 	Object 
+derive class iTask Detector, ObjectType, ActorStatus, Availability
+derive class iTask Cable, CableConnection, Priority, MapClick
+
+instance 	== 			ObjectType
+instance	== 			Priority   
+
+instance	toString 	ObjectType
 instance 	toString 	Exit 
 instance 	toString 	Detector
 	
 // shared stores:
 
-myMap             	 :: RWShared () MyMap MyMap 			// map of the ship
+myMap          :: DungeonMap // map of the ship
+myStatusMap    :: RWShared () MyRoomStatusMap    MyRoomStatusMap
+myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
+myActorMap     :: RWShared () MyRoomActorMap     MyRoomActorMap
 
-allAvailableActors 	:: ReadOnlyShared [(RoomNumber, MyActor)]
-allActors 		   	:: ReadOnlyShared [(RoomNumber, MyActor)]
-allActiveAlarms 	:: ReadOnlyShared [(RoomNumber, Detector)]
+statusInRoomShare    :: RWShared RoomNumber RoomStatus RoomStatus
+inventoryInRoomShare :: RWShared RoomNumber [MyObject] [MyObject]
+actorsInRoomShare    :: RWShared RoomNumber [MyActor] [MyActor]
+
+allActiveAlarms    :: ReadOnlyShared [(RoomNumber, Detector)]
+allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
 
 // setting and resetting of the detection systems:
 
-setAlarm 		:: User (RoomNumber,Detector) Bool (Shared MyMap) -> Task ()
+setAlarm 		:: User (RoomNumber,Detector) Bool (Shared MyRoomStatusMap) -> Task ()
 
 
 isHigh 			:: !Detector -> Bool
@@ -58,7 +84,5 @@ resetDetector 	:: !Detector -> Detector
 showMap 			:: Task MapClick
 setRoomDetectors 	:: Task ()
 
-mapImage 	:: !Bool !(!MyMap, MapClick) !*TagSource -> Image (a, MapClick)
-floorImage 	:: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-roomImage 	:: !Bool !(Maybe MyRoom) !*TagSource -> Image (a, MapClick)
+roomImage 	:: !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
 

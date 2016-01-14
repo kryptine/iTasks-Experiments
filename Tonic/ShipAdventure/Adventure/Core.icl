@@ -5,17 +5,20 @@ import iTasks
  
 import iTasks._Framework.Tonic
 import iTasks.API.Extensions.Admin.TonicAdmin
+import qualified Data.Map as DM
+from Data.Map import :: Map
 import qualified Data.IntMap.Strict as DIS
 from Data.IntMap.Strict import :: IntMap
 import qualified Data.Heap as DH
 from Data.Heap import :: Heap
-
+import GenLexOrd
 from Adventure.Logging import addLog
+import Data.List
 
 import StdMisc
 
 
-derive class iTask Room, Exit, Actor
+derive class iTask Room, Exit, Actor, Object
 
 // small utility functions 
 
@@ -23,68 +26,123 @@ instance == (Actor o a)  where (==) a1 a2 = a1.userName == a2.userName
 
 instance == Exit where (==) e1 e2 =e1 === e2
 
+derive gLexOrd Exit
+
+instance < Exit where
+  (<) e1 e2 = gLexOrd{|*|} e1 e2 === LT
+
+instance == (Object obj) | == obj where
+  (==) o1 o2 = o1 == o2
+
+instance toString (Object obj) | toString obj where
+  toString {Object | objId, objType} = toString objType +++ " " +++ toString objId
+
 :: PreviousIdx :== Int
 :: NodeIdx     :== Int
 :: Weight      :== Int
-:: Graph r o a :== IntMap (Distance, PreviousIdx, Room r o a)
+:: Graph       :== IntMap (Distance, PreviousIdx, Room)
 
 infinity =: 67108864
 
-shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(MAP r o a) -> Maybe ([Exit], Distance)
-shortestPath cost startRoomNumber endRoomNumber allRooms
-  = reconstructSP (findSP cost (mkGraph allRooms) ('DH'.singleton (0, startRoomNumber)))
+mapLens :: String (RWShared () (Map a b) (Map a b)) (Maybe b) -> RWShared a b b | < a & == a
+mapLens name origShare mdef = sdsLens name (const ()) (SDSRead (read mdef)) (SDSWrite write) (SDSNotify notify) origShare
   where
-  reconstructSP :: !(Graph r o a) -> Maybe ([Exit], Distance)
+  read :: (Maybe b) a (Map a b) -> MaybeError TaskException b | < a & == a
+  read mdef idx m
+    = case 'DM'.get idx m of
+        Just x -> Ok x
+        _      -> case mdef of
+                    Just def -> Ok def
+                    _        -> Error (exception (name +++ " (mapLens): Index not found"))
+
+  write :: a (Map a b) b -> MaybeError TaskException (Maybe (Map a b)) | < a & == a
+  write idx oldmap newval = Ok (Just ('DM'.put idx newval oldmap))
+
+  notify :: a (Map a b) b -> SDSNotifyPred a | < a & == a
+  notify idx oldmap newval = \idx` -> idx == idx`
+
+intMapLens :: String (RWShared () (IntMap a) (IntMap a)) (Maybe a) -> RWShared Int a a
+intMapLens name origShare mdef = sdsLens name (const ()) (SDSRead (read mdef)) (SDSWrite write) (SDSNotify notify) origShare
+  where
+  read :: (Maybe a) Int (IntMap a) -> MaybeError TaskException a
+  read mdef idx intmap
+    = case 'DIS'.get idx intmap of
+        Just x -> Ok x
+        _      -> case mdef of
+                    Just def -> Ok def
+                    _        -> Error (exception (name +++ " (intMapLens): Index " +++ toString idx +++ " not found"))
+
+  write :: Int (IntMap a) a -> MaybeError TaskException (Maybe (IntMap a))
+  write idx oldmap newval = Ok (Just ('DIS'.put idx newval oldmap))
+
+  notify :: Int (IntMap a) a -> SDSNotifyPred Int
+  notify idx oldmap newval = \idx` -> idx == idx`
+
+exitLockShare :: RWShared () RoomExitLockMap RoomExitLockMap
+exitLockShare = sharedStore "exitLockShare" 'DM'.newMap
+
+lockStatusForExit :: RWShared (RoomNumber, Exit) Locked Locked
+lockStatusForExit = mapLens "lockStatusForExit" exitLockShare (Just False)
+
+shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(RoomStatusMap r) !RoomExitLockMap !DungeonMap
+             -> Maybe ([Exit], Distance)
+shortestPath cost startRoomNumber endRoomNumber statusMap exitLocks allRooms
+  = reconstructSP (findSP cost (mkGraph allRooms) ('DH'.singleton (0, startRoomNumber)) statusMap)
+  where
+  reconstructSP :: !Graph -> Maybe ([Exit], Distance)
   reconstructSP graph
     = case 'DIS'.get endRoomNumber graph of
         Just (d, _, _) -> fmap (\x -> (x, d)) (reconstructSP` graph endRoomNumber [])
         _              -> Nothing
 
-  reconstructSP` :: !(Graph r o a) !RoomNumber ![Exit] -> Maybe [Exit]
+  reconstructSP` :: !Graph !RoomNumber ![Exit] -> Maybe [Exit]
   reconstructSP` graph currIdx path
     | currIdx == startRoomNumber = Just path
     | otherwise = case 'DIS'.get currIdx graph of
                     Just (_, prevIdx, _)
                       -> case 'DIS'.get prevIdx graph of
                            Just (_, _, {exits})
-                             -> case [e \\ (e, _) <- exits | fromExit e == currIdx] of
+                             -> case [e \\ e <- exits | fromExit e == currIdx] of
                                   [] -> Nothing
                                   [exit : _] -> reconstructSP` graph prevIdx [exit : path]
                            _ -> Nothing
                     _ -> Nothing
 
-  findSP :: !(r -> Weight) !(Graph r o a) !(Heap (Distance, NodeIdx)) -> Graph r o a
-  findSP cost graph queue
+  findSP :: !(r -> Weight) !Graph !(Heap (Distance, NodeIdx)) !(RoomStatusMap r) -> Graph
+  findSP cost graph queue statusMap
     | 'DH'.null queue = graph
     | otherwise
       = case 'DH'.uncons queue of
           Just ((minDist, minIdx), queue)
             = case 'DIS'.get minIdx graph of
                 Just (_, _, {exits})
-                  #! (graph, queue) = foldr (foldExits cost minDist minIdx) (graph, queue) exits
-                  = findSP cost graph queue
+                  #! (graph, queue) = foldr (foldExits statusMap cost minDist minIdx) (graph, queue) exits
+                  = findSP cost graph queue statusMap
                 _ = graph
           _ = graph
     where
-    foldExits :: !(r -> Weight) !Distance !NodeIdx !(!Exit, !Locked) !(!Graph r o a, !Heap (Distance, NodeIdx)) -> (!Graph r o a, !Heap (Distance, NodeIdx))
-    foldExits cost minDist minIdx (exit, False) (graph, queue)
-      = case 'DIS'.get (fromExit exit) graph of
-          Just (nDist, nPrevIdx, nRoom)
-            #! alt = minDist + cost nRoom.roomStatus
-            | alt < nDist
-              = ( 'DIS'.alter (fmap (\(_, _, r) -> (alt, minIdx, r))) nRoom.number graph
-                , 'DH'.insert (alt, nRoom.number) queue)
-            | otherwise = (graph, queue)
-          _ = (graph, queue)
-    foldExits _ _ _ _ (graph, queue) = (graph, queue)
+    foldExits :: !(RoomStatusMap r) !(r -> Weight) !Distance !NodeIdx !Exit !(!Graph, !Heap (Distance, NodeIdx))
+              -> (!Graph, !Heap (Distance, NodeIdx))
+    foldExits statusMap cost minDist minIdx exit (graph, queue)
+      | 'DM'.get (minIdx, exit) exitLocks == Just False
+        #! exitNo = fromExit exit
+        = case ('DIS'.get exitNo graph, 'DIS'.get exitNo statusMap) of
+            (Just (nDist, nPrevIdx, nRoom), Just roomStatus)
+              #! alt = minDist + cost roomStatus
+              | alt < nDist
+                = ( 'DIS'.alter (fmap (\(_, _, r) -> (alt, minIdx, r))) nRoom.number graph
+                  , 'DH'.insert (alt, nRoom.number) queue)
+              | otherwise = (graph, queue)
+            _ = (graph, queue)
+      | otherwise = (graph, queue)
 
-  mkGraph :: !(MAP r o a) -> Graph r o a
+  mkGraph :: !DungeonMap -> Graph
   mkGraph playMap = foldr floorToGraph 'DIS'.newMap playMap
     where
-    floorToGraph :: !(Floor r o a) !(Graph r o a) -> Graph r o a
+    floorToGraph :: !Floor !Graph -> Graph
     floorToGraph floor graph = foldr (\rooms graph -> foldr roomToGraph graph rooms) graph floor
 
-    roomToGraph :: !(Room r o a) !(Graph r o a) -> Graph r o a
+    roomToGraph :: !Room !Graph -> Graph
     roomToGraph room=:{number} graph
       #! dist = if (number == startRoomNumber) 0 infinity
       = 'DIS'.put number (dist, -1, room) graph
@@ -99,270 +157,285 @@ fromExit (Down  i) = i
 
 // moving around in the map
 
-addActorToMap :: ((Room r o a) -> Task ()) (Actor o a) RoomNumber (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-addActorToMap roomViz actor location smap
-  =           get smap
-  >>= \map -> if (existsRoom location map)
-                (   updateRoom location (entering actor) smap
-                >>| moveAround roomViz actor noTask smap @! ()
-                )
-                (viewInformation ("Room with number: " <+++ location <+++ " does not exist") [] () >>| return ())
+addActorToMap :: (Room -> Task ()) (Actor o a) RoomNumber (Shared (RoomStatusMap r))
+                 (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
+              -> Task () | iTask r & iTask o & iTask a & Eq o
+addActorToMap roomViz actor location shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap
+  | existsRoom location dungeonMap
+    =   enterRoom actor location shRoomActorMap
+    >>| moveAround roomViz actor noTask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap @! ()
+  | otherwise = viewInformation ("Room with number: " <+++ location <+++ " does not exist") [] () >>| return ()
   where
-  noTask :: Maybe (ActorTask r o a ()) | iTask r & iTask o & iTask a & Eq o
+  noTask :: Maybe (ActorTask r o a ()) | iTask o & iTask a & Eq o
   noTask = Nothing
 
-moveAround :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
-moveAround roomViz actor mbtask smap
-  = repeatTask (\_ -> moveOneStep roomViz actor mbtask smap) isJust Nothing
+moveAround :: (Room -> Task ()) (Actor o a) (Maybe (ActorTask r o a b))
+              (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
+           -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
+moveAround roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap
+  = repeatTask (\_ -> moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap) isJust Nothing
 
-moveOneStep :: ((Room r o a) -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (MAP r o a)) -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
-moveOneStep roomViz actor mbtask smap
-	= whileUnchanged smap
-			(\map -> let room 	= findRoom actor map 
-						 nactor = latestActorStatus actor room
-					 in
-					(	 (		( roomViz room
-								 >>* (   exitActions room nactor
-                                      ++ inventoryActions room nactor
-								      ++ carryActions room nactor
-								     ) @! Nothing
-								)
-								-||- 
-								(if (isNothing mbtask) (viewInformation "" [] () @!  Nothing) ((fromJust mbtask) nactor room map))  
-						)
-			    )
-			)
-where
-    exitActions room nactor
-      = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) nactor smap))
-        \\ (exit, False) <- room.exits
-        ]
-    inventoryActions room nactor
-      = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object nactor smap))
-        \\ object <- room.inventory
-        ]
-    carryActions room nactor
-      = [ OnAction (Action ("Drop " <+++ object) []) (always (dropDownObject room.number object nactor smap))
-        \\ object <- nactor.carrying
-        ]
+moveOneStep :: (Room -> Task ()) (Actor o a) (Maybe (ActorTask r o a b))
+               (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
+            -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
+moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap
+  = whileUnchanged (shStatusMap |+| shRoomActorMap |+| shRoomInventoryMap |+| exitLockShare)
+      (\(((statusMap, roomActorMap), roomInventory), exitLocks)
+         -> case findActorRoom actor roomActorMap dungeonMap of
+              Just room
+                = ( roomViz room
+                    >>* (  exitActions room actor exitLocks
+                        ++ inventoryActions room roomInventory actor
+                        ++ carryActions room actor
+                        ) @! Nothing
+                   ) -||-
+                   (case mbtask of
+                      Nothing -> viewInformation "" [] () @! Nothing
+                      Just t  -> t actor room statusMap roomActorMap roomInventory dungeonMap
+                   )
+              _ = viewInformation "Failed to find actor" [] "Failed to find actor" @! Nothing
+      )
+  where
+  exitActions room nactor exitLocks
+    = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) nactor shRoomActorMap))
+      \\ exit <- room.exits
+      | 'DM'.get (room.number, exit) exitLocks == Just False
+      ]
+  inventoryActions room roomInventory nactor
+    = case 'DIS'.get room.number roomInventory of
+        Just objects
+          = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object nactor shRoomActorMap shRoomInventoryMap))
+            \\ object <- objects
+            ]
+        _ = []
+  carryActions room nactor
+    = [ OnAction (Action ("Drop " <+++ object) []) (always (dropObject room.number object nactor shRoomActorMap shRoomInventoryMap))
+      \\ object <- nactor.carrying
+      ]
 
-pickupObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
-pickupObject roomNumber object actor smap
-	=		updateRoom roomNumber (fetchObject object) smap
-	>>|		updateRoom roomNumber (updateActor {actor & carrying = [object:actor.carrying]}) smap
-	>>|		return True
+pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
+             -> Task Bool | iTask o & iTask a & Eq o
+pickupObject roomNumber object actor shRoomActorMap shRoomInventoryMap
+  =   updateRoomInventory roomNumber (\inv -> [obj \\ obj <- inv | obj.objId <> object.objId]) shRoomInventoryMap
+  >>| updateActor roomNumber {actor & carrying = [object:actor.carrying]} shRoomActorMap
+  >>| return True
 
-dropDownObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
-dropDownObject roomNumber object actor smap
-	=		updateRoom roomNumber (dropObject object) smap
-	>>|		updateRoom roomNumber (updateActor {actor & carrying = removeMember object actor.carrying}) smap
-	>>|		return True
+dropObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
+           -> Task Bool | iTask o & iTask a & Eq o
+dropObject roomNumber object actor shRoomActorMap shRoomInventoryMap
+  =   updateRoomInventory roomNumber (\inv -> [object : inv]) shRoomInventoryMap
+  >>| updateActor roomNumber {actor & carrying = removeMember object actor.carrying} shRoomActorMap
+  >>| return True
 
-move ::  RoomNumber RoomNumber (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
-move fromRoom toRoom actor smap
-	= 		updateRoom fromRoom (leaving actor) smap
-	>>| 	updateRoom toRoom (entering actor) smap
-	>>|		return True
+move ::  RoomNumber RoomNumber (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
+move fromRoom toRoom actor shRoomActorMap
+  =   leaveRoom actor fromRoom shRoomActorMap
+  >>| enterRoom actor toRoom shRoomActorMap
+  >>| return True
 
-useObject :: RoomNumber o (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o 
-useObject roomNumber object actor smap
-	=		updateRoom roomNumber (updateActor {actor & carrying = removeMember object actor.carrying}) smap
-	>>|		return True
+useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
+useObject roomNumber object actor shRoomActorMap
+  =   updateActor roomNumber {actor & carrying = removeMember object actor.carrying} shRoomActorMap
+  >>| return True
 
 // auto moves around the maze
 
-autoMove :: RoomNumber RoomNumber (RoomNumber RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) (Actor o a) (Shared (MAP r o a)) -> Task Bool | iTask r & iTask o & iTask a & Eq o
-autoMove thisRoom target pathFun actor smap
-| thisRoom == target 
-	= 	return True
-= 			   		get smap
-	>>= \curMap -> 	let room 	= findRoom actor curMap 
-				 		nactor  = latestActorStatus actor room
-				 		path	= pathFun thisRoom target curMap
-					in	case pathFun thisRoom target curMap of
-                          Just (path=:[_:_], _)
-						    # nextRoom = fromExit (hd path)
-							=     waitForTimer  {Time | hour = 0, min = 0, sec = delay}
-							  >>| move room.number nextRoom nactor smap
-							  >>| addLog nactor.userName "" ("Has moved to Room " <+++ nextRoom)
-					 		  >>| waitForTimer  {Time | hour = 0, min = 0, sec = delay} 
-					 		  >>| autoMove nextRoom target pathFun nactor smap
+autoMove :: RoomNumber RoomNumber
+            (RoomNumber RoomNumber (RoomStatusMap r) RoomExitLockMap DungeonMap -> Maybe ([Exit], Distance))
+            (Actor o a) (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) DungeonMap
+         -> Task Bool | iTask r & iTask o & iTask a & Eq o
+autoMove thisRoom target pathFun actor shStatusMap shActorMap dungeonMap
+  | thisRoom == target = return True
+  | otherwise
+      =                 get shStatusMap
+      >>= \statusMap -> get shActorMap
+      >>= \actorMap  -> get exitLockShare
+      >>= \exitLocks -> case findActorRoom actor actorMap dungeonMap of
+                          Just room
+                            # path = pathFun thisRoom target statusMap exitLocks dungeonMap
+                            = case pathFun thisRoom target statusMap exitLocks dungeonMap of
+                                Just (path=:[_:_], _)
+                                  # nextRoom = fromExit (hd path)
+                                  =     waitForTimer {Time | hour = 0, min = 0, sec = delay}
+                                    >>| move room.number nextRoom actor shActorMap
+                                    >>| addLog actor.userName "" ("Has moved to Room " <+++ nextRoom)
+                                    >>| waitForTimer {Time | hour = 0, min = 0, sec = delay}
+                                    >>| autoMove nextRoom target pathFun actor shStatusMap shActorMap dungeonMap
+                                _ = return False
                           _ = return False
 
 delay = 1
 
 // room updating
 
-updateRoom :: RoomNumber ((Room r o a) -> (Room r o a)) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a
-updateRoom roomNumber updRoom smap
-  =   upd (updateRoom` roomNumber updRoom) smap
-  >>| return ()
-  where
-  updateRoom` i upd []             = []
-  updateRoom` i upd [floor:floors] = [[map updateThisRoom rooms \\ rooms <- floor]: updateRoom` i upd floors]
-    where
-    updateThisRoom room
-    | i == room.number = upd room
-    | otherwise        = room
+updateActor :: RoomNumber (Actor o a) (Shared (RoomActorMap o a)) -> Task () | iTask o & iTask a
+updateActor roomNumber actor smap
+  = upd ('DIS'.alter (fmap (\actors -> [if (a.userName == actor.userName) actor a \\ a <- actors])) roomNumber) smap @! ()
+
+// TODO Use shares with room-number focus domain
+updateRoomInventory :: RoomNumber ([Object o] -> [Object o]) (Shared (RoomInventoryMap o))
+                    -> Task () | iTask o
+updateRoomInventory roomNumber updRoom smap
+  =              get smap
+  >>= \invMap -> case 'DIS'.get roomNumber invMap of
+                   Just objs -> set ('DIS'.put roomNumber (updRoom objs) invMap) smap @! ()
+                   _         -> return ()
 
 // actor status opdating
 
-updActorStatus :: User (a -> a) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+updActorStatus :: User (a -> a) (Shared (RoomActorMap o a)) -> Task () | iTask a & iTask o
 updActorStatus user upd smap
-  =              get smap
-  >>= \curMap -> case findUser user curMap of
-                   Nothing                  -> return ()
-                   Just (roomnumber, actor) -> updateRoom roomnumber (updateActor (updStatus actor)) smap
+  =             get smap
+  >>= \smap` -> case findUser user smap` of
+                  Nothing                  -> return ()
+                  Just (roomnumber, actor) -> updateActor roomnumber actor smap
   where
   updStatus actor = {actor & actorStatus = upd actor.actorStatus}
 
 // room status updating
 
-toggleExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+toggleExit :: RoomNumber Exit DungeonMap -> Task ()
 toggleExit roomNo exit smap = updExit roomNo exit smap not
 
-lockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+lockExit :: RoomNumber Exit DungeonMap -> Task ()
 lockExit roomNo exit smap = updExit roomNo exit smap (const True)
 
-unlockExit :: RoomNumber Exit (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
+unlockExit :: RoomNumber Exit DungeonMap -> Task ()
 unlockExit roomNo exit smap = updExit roomNo exit smap (const False)
 
-updExit :: RoomNumber Exit (Shared (MAP r o a)) (Locked -> Locked) -> Task () | iTask r & iTask o & iTask a & Eq o
-updExit roomNo exit smap lockf
-  = upd (map (map (map (updRoom (inverseExit exit))))) smap @! ()
-  where
-  updRoom :: !Exit !(Room r o a) -> Room r o a | iTask r & iTask o & iTask a & Eq o
-  updRoom ie r = {r & exits = [if (interestingExit ie r e) (e, lockf l) (e, l)  \\ (e, l) <- r.exits] }
+updExit :: RoomNumber Exit DungeonMap (Locked -> Locked) -> Task ()
+updExit roomNo exit smap lockf = return () // TODO FIXME
+  //= upd (map (map (map (updRoom (inverseExit exit))))) smap @! ()
+  //where
+  //updRoom :: !Exit !Room -> Room
+  //updRoom ie r = r // TODO FIXME {r & exits = [if (interestingExit ie r e) (e, lockf l) (e, l)  \\ (e, l) <- r.exits] }
 
-  interestingExit :: !Exit !(Room r o a) !Exit -> Bool
-  interestingExit ie r e = (r.number == roomNo && e == exit) || (r.number == fromExit exit && e == ie)
+  //interestingExit :: !Exit !Room !Exit -> Bool
+  //interestingExit ie r e = (r.number == roomNo && e == exit) || (r.number == fromExit exit && e == ie)
 
-  inverseExit :: !Exit -> Exit
-  inverseExit (North _) = South roomNo
-  inverseExit (South _) = North roomNo
-  inverseExit (East _)  = West roomNo
-  inverseExit (West _)  = East roomNo
-  inverseExit (Up _)    = Down roomNo
-  inverseExit (Down _)  = Up roomNo
+  //inverseExit :: !Exit -> Exit
+  //inverseExit (North _) = South roomNo
+  //inverseExit (South _) = North roomNo
+  //inverseExit (East _)  = West roomNo
+  //inverseExit (West _)  = East roomNo
+  //inverseExit (Up _)    = Down roomNo
+  //inverseExit (Down _)  = Up roomNo
 
-getRoom :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe (Room r o a)) | iTask r & iTask o & iTask a & Eq o
-getRoom roomNumber smap = get smap >>= return o getRoomFromMap roomNumber
-
-getRoomFromMap :: RoomNumber (MAP r o a) -> Maybe (Room r o a) | iTask r & iTask o & iTask a & Eq o
+getRoomFromMap :: RoomNumber DungeonMap -> Maybe Room
 getRoomFromMap roomNumber m
   = case [room \\ room <- allRooms m | room.number == roomNumber] of
       []     -> Nothing
       status -> Just (hd status)
 
-getRoomStatus :: RoomNumber (Shared (MAP r o a)) -> Task (Maybe r) | iTask r & iTask o & iTask a & Eq o
-getRoomStatus roomNumber smap
-  =           get smap
-  >>= \map -> case [room.roomStatus \\ room <- allRooms map | room.number == roomNumber] of
-                [] -> return Nothing
-                status -> return (Just (hd status))
-
-updRoomStatus :: RoomNumber (r -> r) (Shared (MAP r o a)) -> Task () | iTask r & iTask o & iTask a & Eq o
-updRoomStatus roomNumber upd smap = updateRoom roomNumber (\room -> {room & roomStatus = upd room.roomStatus}) smap
+updRoomStatus :: RoomNumber (r -> r) (Shared (RoomStatusMap r)) -> Task () | iTask r
+updRoomStatus roomNumber f smap
+  = upd ('DIS'.alter (fmap f) roomNumber) smap @! ()
 
 // room updating utility functions
 
-leaving :: (Actor o a) (Room r o a) -> (Room r o a) | Eq o
-leaving actor room = {room & actors = removeMember actor room.actors}
+leaveRoom :: (Actor o a) RoomNumber (Shared (RoomActorMap o a)) -> Task () | iTask o & iTask a
+leaveRoom actor roomNo shStatusMap
+  = upd ('DIS'.alter (fmap (\actors -> [a \\ a <- actors | a <> actor])) roomNo) shStatusMap @! ()
 
-entering :: (Actor o a) (Room r o a) -> (Room r o a)
-entering actor room = {room & actors = [actor:room.actors]}
-
-fetchObject :: o (Room r o a) -> (Room r o a) | Eq o
-fetchObject object room = {room & inventory = removeMember object room.inventory}
-
-dropObject ::  o (Room r o a) -> (Room r o a)
-dropObject object room = {room & inventory = [object:room.inventory]}
-
-updateActor :: (Actor o a) (Room r o a) -> (Room r o a) | Eq o
-updateActor actor room = {room & actors = [actor:removeMember actor room.actors]}
+enterRoom :: (Actor o a) RoomNumber (Shared (RoomActorMap o a)) -> Task () | iTask o & iTask a
+enterRoom actor roomNo shActorMap
+  = upd f shActorMap @! ()
+  where
+  f actorMap
+    # actors = 'DIS'.findWithDefault [] roomNo actorMap
+    = 'DIS'.put roomNo (nub [actor:actors]) actorMap
 
 // utility functions to find things located in the map
 
-findUser :: User (MAP r o a) ->  Maybe (RoomNumber,(Actor o a))
-findUser user map = listToMaybe [ (location,actor) \\ (location,actor) <- findAllActors map
-                                | actor.userName == user]
+findActorRoom :: (Actor o a) (RoomActorMap o a) DungeonMap -> Maybe Room
+findActorRoom actor rmap dungeonMap
+  # roomNos = [ roomNo
+              \\ (roomNo, actors) <- 'DIS'.toList rmap
+              , actor` <- actors
+              | actor.userName == actor`.userName
+              ]
+  = case roomNos of
+      []           -> Nothing
+      [roomNo : _] -> case findRoom roomNo dungeonMap of
+                        Just r -> Just r
+                        _      -> Nothing
 
-findRoom :: (Actor o a) (MAP r o a) -> Room r o a
-findRoom actor map
-  # rooms = [ room
-            \\ floor <- map, layer <- floor, room <- layer, {userName} <- room.actors
-            | actor.userName == userName
-            ]
-  = case rooms of
-      []    -> abort "cannot find room of actor"
-      [x:_] -> x
+findAllObjects :: (RoomInventoryMap o) -> [(RoomNumber, Object o)] | iTask o
+findAllObjects objectMap = [ (roomNo, object)
+                           \\ (roomNo, objects) <- 'DIS'.toList objectMap
+                           , object <- objects
+                           ]
 
-latestActorStatus :: (Actor o a) (Room r o a) -> Actor o a
-latestActorStatus actor room = hd [nactor \\ nactor <- room.actors
-                                  | nactor.userName == actor.userName]
+// TODO Make this more efficient
+findUser :: User (RoomActorMap o a) -> Maybe (RoomNumber, Actor o a) | iTask o & iTask a
+findUser usr actorMap = case [ (roomNo, actor) \\ (roomNo, actors) <- 'DIS'.toList actorMap
+                             , actor <- actors
+                             | actor.userName == usr] of
+                          [x : _] -> Just x
+                          _       -> Nothing
 
-findAllActors :: (MAP r o a) ->  [(RoomNumber, Actor o a)]
-findAllActors map = [ (room.number,actor)
-                    \\ floor <- map, layer <- floor, room <- layer, actor <- room.actors
-                    ]
+findRoom :: RoomNumber DungeonMap -> Maybe Room
+findRoom _ [] = Nothing
+findRoom roomNo [floor : floors] = case findRoom` floor of
+                                     Nothing -> findRoom roomNo floors
+                                     x       -> x
+  where
+  findRoom` []               = Nothing
+  findRoom` [rooms : roomss] = case findRoom`` rooms of
+                                 Nothing -> findRoom` roomss
+                                 x       -> x
+  findRoom`` [] = Nothing
+  findRoom`` [room : rooms]
+    | room.number == roomNo = Just room
+    | otherwise             = Nothing
 
-findAllObjects :: (MAP r o a) -> [(RoomNumber, o)]
-findAllObjects map = [ (room.number,object)
-                     \\ floor <- map, layer <- floor, room <- layer, object <- room.inventory
-                     ]
+allRooms :: DungeonMap -> [Room]
+allRooms dungeonMap = [room \\ floor <- dungeonMap, layer <- floor, room <- layer]
 
-findObjectsInRoom :: RoomNumber (MAP r o a) -> Maybe o
-findObjectsInRoom roomNumber map = listToMaybe [o \\ (i,o) <- findAllObjects map | i == roomNumber]
-
-allRoomStatus :: (MAP r o a) -> [(RoomNumber, r)]
-allRoomStatus map = [(number,roomStatus) \\ {number,roomStatus} <- allRooms map]
-
-allRoomNumbers :: (MAP r o a) ->  [RoomNumber]
-allRoomNumbers map = [room.number
-                     \\ floor <- map, layer <- floor, room <- layer
-                     ]
-
-allRooms :: (MAP r o a) ->  [Room r o a]
-allRooms map = [room \\ floor <- map, layer <- floor, room <- layer]
-
-existsRoom :: RoomNumber (MAP r o a) -> Bool
-existsRoom i map = isMember i (allRoomNumbers map)
+existsRoom :: RoomNumber DungeonMap -> Bool
+existsRoom i map = isMember i [  room.number
+                              \\ floor <- map, layer <- floor, room <- layer
+                              ]
 
 // returns: number of objects found, location of object, distance to object, shortest path to obejct
+//shortestPath :: !(r -> Weight) !RoomNumber !RoomNumber !(RoomStatusMap r) !RoomExitLockMap !DungeonMap
+             //-> Maybe ([Exit], Distance)
 
-pathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber (MAP r o a) 
-					-> (Int, (RoomNumber, Distance, Maybe ([Exit], Distance))) | Eq o 
-pathToClosestObject sp kind actorLoc curMap
+pathToClosestObject :: (RoomNumber RoomNumber (RoomStatusMap r) RoomExitLockMap DungeonMap -> Maybe ([Exit], Distance))
+                       o RoomNumber (RoomStatusMap r) (RoomInventoryMap o) RoomExitLockMap DungeonMap
+                    -> (Int, (RoomNumber, Distance, Maybe ([Exit], Distance))) | iTask o & iTask r & Eq o
+pathToClosestObject sp kind actorLoc statusMap inventoryMap exitLocks dungeonMap
   # spath = sortBy (\(_, i, _) (_, j, _) -> i < j)
                    (filter (\(ol, l, p) -> ol >= 0)
-                           [case sp actorLoc objectLoc curMap of
+                           [case sp actorLoc objectLoc statusMap exitLocks dungeonMap of
                               path=:(Just (_, dist)) -> (objectLoc, dist, path)
                               _                      -> (-1, infinity, Nothing)
-                           \\ (objectLoc, found) <- findAllObjects curMap | found == kind ])
+                           \\ (objectLoc, found) <- findAllObjects inventoryMap | found.objType == kind ])
   = case spath of
       [x=:(_, _, Just (path, _)) :_] -> (length spath, x)
       []                             -> (-1, (-1, -1, Nothing))
 
 // returns: number of objects found, location of object, distance to object, shortest path to obejct
-smartPathToClosestObject :: (RoomNumber !RoomNumber (MAP r o a) -> Maybe ([Exit], Distance)) o RoomNumber RoomNumber (MAP r o a) 
-	-> (Int, Distance, Int, (RoomNumber, Distance, Maybe [Exit])) | Eq o 
-smartPathToClosestObject spath objectKind actorLoc targetLoc curMap
-  # foundObjects = [objectLoc \\ (objectLoc, found) <- findAllObjects curMap | found == objectKind ]
-  | isEmpty foundObjects = (infinity, infinity, 0, (-1, -1, Nothing))
-  # pathsFound = sortBy (\(i, _, _) (j, _, _) -> i < j)
-                        (filter (\(d, _, (loc, dist, path)) -> isJust path)
-                        [ let (oPath, oDistance) = case spath actorLoc objectLoc curMap of
+smartPathToClosestObject :: (RoomNumber RoomNumber (RoomStatusMap r) RoomExitLockMap DungeonMap -> Maybe ([Exit], Distance))
+                            o RoomNumber RoomNumber (RoomStatusMap r) (RoomInventoryMap o) RoomExitLockMap DungeonMap
+                         -> (Maybe (Object o), Int, Distance, Int, (RoomNumber, Distance, Maybe [Exit])) | iTask o & iTask r & Eq o
+smartPathToClosestObject spath objectKind actorLoc targetLoc statusMap inventoryMap exitLocks dungeonMap
+  # foundObjects = [tpl \\ tpl=:(_, found) <- findAllObjects inventoryMap | found.objType == objectKind ]
+  | isEmpty foundObjects = (Nothing, infinity, infinity, 0, (-1, -1, Nothing))
+  # pathsFound = sortBy (\(_, i, _, _) (_, j, _, _) -> i < j)
+                        (filter (\(_, d, _, (loc, dist, path)) -> isJust path)
+                        [ let (oPath, oDistance) = case spath actorLoc objectLoc statusMap exitLocks dungeonMap of
                                                      (Just (path, distance)) -> (Just path, distance)
                                                      _                       -> (Nothing, infinity)
-                              (tPath, tDistance) = case spath objectLoc targetLoc curMap of
+                              (tPath, tDistance) = case spath objectLoc targetLoc statusMap exitLocks dungeonMap of
                                                      (Just (path, distance)) -> (Just path, distance)
                                                      _                       -> (Nothing, infinity)
                               totalPathDist      = case (oPath, tPath) of
                                                      (Just xs, Just ys) -> length xs + length ys
                                                      _                  -> infinity
-                          in (oDistance + tDistance, totalPathDist, (objectLoc, oDistance, oPath))
-                        \\ objectLoc <- foundObjects | objectLoc <> targetLoc
+                          in (obj, oDistance + tDistance, totalPathDist, (objectLoc, oDistance, oPath))
+                        \\ (objectLoc, obj) <- foundObjects | objectLoc <> targetLoc
                         ])
   = case pathsFound of
-      [(cost, totalDist, x=:(_, _, Just path)) :_] -> (cost, totalDist, length pathsFound, x)
-      []                                           -> (infinity, infinity, -1, (-1, -1, Nothing))
+      [(obj, cost, totalDist, x=:(_, _, Just path)) :_] -> (Just obj, cost, totalDist, length pathsFound, x)
+      []                                                -> (Nothing, infinity, infinity, -1, (-1, -1, Nothing))

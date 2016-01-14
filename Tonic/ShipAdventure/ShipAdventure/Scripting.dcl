@@ -7,17 +7,18 @@ import ShipAdventure.Types
 
 // script language
 
+
 :: Target		= 	Room Int
-				|	Nearest Object
+				|	Nearest ObjectType
 				|	TargetRoom
 :: Script		=	MoveTo Target
-				|	Take Object
-				|	Drop Object
-				|	Use Object
+				|	Take ObjectType
+				|	Drop ObjectType
+				|	Use ObjectType
 				|	ReSetTargetDetector 
 				|	If Condition [Script] [Script]
-:: Condition	=	ObjectInCurrentRoom Object
-				|	CarriesObject Object
+:: Condition	=	ObjectInCurrentRoom ObjectType
+				|	CarriesObject ObjectType
 				|	ActorStatus ActorStatus
 				|	And Condition Condition
 				|	Or Condition Condition

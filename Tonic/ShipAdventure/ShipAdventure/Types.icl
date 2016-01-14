@@ -10,21 +10,25 @@ import qualified Data.List as DL
 from Data.Func import mapSt
 import StdArray
 import Data.Data
+import qualified Data.IntMap.Strict as DIS
+import qualified Data.Map as DM
 
 import Adventure.Core
 from Adventure.Logging import addLog
 import ShipAdventure.PathFinding
 
 
-derive class iTask Detector, Object, ActorStatus, Availability, Priority, MapClick
+derive class iTask Detector, ObjectType, ActorStatus, Availability
+derive class iTask Cable, CableConnection, Priority, MapClick
 
 // std overloading instances
 
-instance == Object      where (==) o1 o2 = o1 === o2
+//instance == Object      where (==) o1 o2 = o1 === o2
+instance == ObjectType  where (==) o1 o2 = o1 === o2
 instance == Priority    where (==) o1 o2 = o1 === o2
-instance toString Object where
-  toString FireExtinguisher = "Fire extinguiser"
-  toString Blanket          = "Blanket"
+instance toString ObjectType where
+  toString FireExtinguisher = "Extinguiser"
+  toString FireBlanket      = "Blanket"
   toString Plug             = "Plug"
 
 instance toString Exit where toString exit = toSingleLineText exit
@@ -36,28 +40,53 @@ where toString (FireDetector _)  = "Fire Alarm"
 
 // shared stores:
 
-myMap :: RWShared () MyMap MyMap // map of the ship
-myMap = sharedStore "myBuilding" myShip
+
+myStatusMap :: RWShared () MyRoomStatusMap MyRoomStatusMap
+myStatusMap = sharedStore "myStatusMap" 'DIS'.newMap
+
+statusInRoomShare :: RWShared RoomNumber RoomStatus RoomStatus
+statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
+
+myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
+myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
+  where
+  invs = [ (4,  [ {Object | objId = 1,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
+         , (7,  [ {Object | objId = 2,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }])
+         , (8,  [ {Object | objId = 3,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
+         , (9,  [ {Object | objId = 4,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }])
+         , (10, [ {Object | objId = 5,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
+         , (14, [ {Object | objId = 6,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
+         , (17, [ {Object | objId = 7,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
+                , {Object | objId = 8,  objType = Plug, reusable = False, portable = True, quantity = 1 }])
+         , (19, [ {Object | objId = 9,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
+                , {Object | objId = 10, objType = Plug, reusable = False, portable = True, quantity = 1 }])
+         , (20, [ {Object | objId = 11, objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
+         ]
+
+inventoryInRoomShare :: RWShared RoomNumber [MyObject] [MyObject]
+inventoryInRoomShare = intMapLens "inventoryInRoomShare" myInventoryMap (Just [])
+
+myActorMap :: RWShared () MyRoomActorMap MyRoomActorMap
+myActorMap = sharedStore "myActorMap" 'DIS'.newMap
+
+actorsInRoomShare :: RWShared RoomNumber [MyActor] [MyActor]
+actorsInRoomShare = intMapLens "actorInRoomShare" myActorMap (Just [])
 
 allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
 allAvailableActors
-  = toReadOnly (sdsProject (SDSLensRead readActors) SDSNoWrite myMap)
-where
-    readActors curMap = Ok [(room,actor) \\ (room,actor) <- findAllActors curMap | actor.actorStatus.occupied === Available ]
-
-allActors :: ReadOnlyShared [(RoomNumber, MyActor)]
-allActors
-  = toReadOnly (sdsProject (SDSLensRead readActors) SDSNoWrite myMap)
-where
-    readActors curMap = Ok [(room,actor) \\ (room,actor) <- findAllActors curMap]
+  = toReadOnly (sdsProject (SDSLensRead readActors) SDSNoWrite myActorMap)
+  where
+  readActors curMap = Ok [ (room, actor) \\ (room,actors) <- 'DIS'.toList curMap
+                         , actor <- actors
+                         | actor.actorStatus.occupied === Available]
 
 allActiveAlarms :: ReadOnlyShared [(RoomNumber, Detector)]
 allActiveAlarms
-  = toReadOnly (sdsProject (SDSLensRead readAlarms) SDSNoWrite myMap)
+  = toReadOnly (sdsProject (SDSLensRead readAlarms) SDSNoWrite myStatusMap)
 where
-    readAlarms curMap = Ok [ (number,detector) \\ (number,detectors) <- allRoomStatus curMap
-                           , detector <- detectors
-                           | isHigh detector]
+    readAlarms statusMap = Ok [ (number,detector) \\ (number,detectors) <- 'DIS'.toList statusMap
+                              , detector <- detectors
+                              | isHigh detector]
 
 // detectors setting
 
@@ -65,16 +94,16 @@ where
 
 setRoomDetectors :: Task ()
 setRoomDetectors 
-	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
+	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
       >>* [OnValue (\tv -> case tv of
-                             Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myMap >>| setRoomDetectors)
+                             Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myStatusMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )]
 
-setAlarm :: User (RoomNumber,Detector) Bool (Shared MyMap) -> Task ()
-setAlarm user (alarmLoc,detector) bool smap
-	= 		updRoomStatus alarmLoc (updDetector (if bool setDetector resetDetector) detector) smap
+setAlarm :: User (RoomNumber,Detector) Bool (Shared MyRoomStatusMap) -> Task ()
+setAlarm user (alarmLoc,detector) bool shStatusMap
+	= 		updRoomStatus alarmLoc (updDetector (if bool setDetector resetDetector) detector) shStatusMap
 	>>|		addLog user ""  ("Resets " <+++ detector <+++ " in Room " <+++ alarmLoc <+++ " to False.") 
 
 //
@@ -100,88 +129,87 @@ resetDetector (FloodDetector b) = FloodDetector False
 // general map viewing
 
 showMap :: Task MapClick
-showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
+showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
             >&> withSelection (return ())
                   (\mapClick -> case mapClick of
-                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(m, a) -> (getRoomFromMap selRoom m, a)) (\(room, _) -> roomImage True room) (\_ _ -> Nothing) (const snd)] myMap NoMapClick
+                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(m, a) -> (getRoomFromMap selRoom myMap, a)) (\(room, _) -> roomImage True room) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
                                   _ -> return NoMapClick)
 
+myMap :: DungeonMap // map of the ship
+myMap = [floor0, floor1]
+  where
+  floor0    = [ [back0]
+              , [room01, room02, room03]
+              , [corridor0]
+              , [room04, room05, room06]
+              , [room07, room08]
+              ]
 
+  back0     = {name = "back 0",     number = 1,  exits = [South 2, South 3, South 4]}
+  room01    = {name = "room 0.1",   number = 2,  exits = [North 1, South 5, Down 12]}
+  room02    = {name = "room 0.2",   number = 3,  exits = [North 1, South 5]}
+  room03    = {name = "room 0.3",   number = 4,  exits = [North 1, South 5]}
+  corridor0 = {name = "corridor 0", number = 5,  exits = [ North 2, North 3, North 4
+                                                         , South 6, South 7, South 8
+                                                         ]}
 
-// definition of the ship layout
+  room04    = {name = "room 0.4",   number = 6,  exits = [North 5, South 9]}
+  room05    = {name = "room 0.5",   number = 7,  exits = [North 5, South 9]}
+  room06    = {name = "room 0.6",   number = 8,  exits = [North 5, South 10]}
+  room07    = {name = "room 0.7",   number = 9,  exits = [North 6, North 7]}
+  room08    = {name = "room 0.8",   number = 10, exits = [North 8, Down 20]}
 
-myShip = [floor0, floor1]
-where
-	floor0  	= [ [back0]
-                  , [room01, room02, room03]
-                  , [corridor0]
-                  , [room04, room05, room06]
-                  , [room07, room08]
-                  ]
-	back0		= {name = "back 0",     number = 1,  roomStatus = detectors, inventory = [], exits = [(South 2, False), (South 3, False), (South 4, False)], actors = []}
-	room01		= {name = "room 0.1",   number = 2,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False), (Down 12, False)], actors = []}			
-	room02		= {name = "room 0.2",   number = 3,  roomStatus = detectors, inventory = [], exits = [(North 1, False), (South 5, False)], actors = []}			
-	room03		= {name = "room 0.3",   number = 4,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 1, False), (South 5, False)], actors = []}
-	corridor0	= {name = "corridor 0", number = 5,  roomStatus = detectors, inventory = [], exits = [(North 2, False), (North 3, False), (North 4, False)
-                                                                                                     , (South 6, False), (South 7, False), (South 8, False)
-                                                                                                     ], actors = []}
-	room04		= {name = "room 0.4",   number = 6,  roomStatus = detectors, inventory = [], exits = [(North 5, False), (South 9, False)], actors = []}			
-	room05		= {name = "room 0.5",   number = 7,  roomStatus = detectors, inventory = [Blanket], exits = [(North 5, False), (South 9, False)], actors = []}			
-	room06		= {name = "room 0.6",   number = 8,  roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 5, False), (South 10, False)], actors = []}
-	room07		= {name = "room 0.7",   number = 9,  roomStatus = detectors, inventory = [Blanket], exits = [(North 6, False), (North 7, False)], actors = []}			
-	room08		= {name = "room 0.8",   number = 10, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 8, False), (Down 20, False)], actors = []}
+  floor1    = [ [back1]
+              , [room11, room12, room13]
+              , [corridor1]
+              , [room14, room15, room16]
+              , [room17, room18]
+              ]
 
-	floor1  	= [ [back1]
-                  , [room11, room12, room13]
-                  , [corridor1]
-                  , [room14, room15, room16]
-                  , [room17, room18]
-                  ]
-	back1		= {name = "back 1",     number = 11, roomStatus = detectors, inventory = [], exits = [(South 12, False), (South 13, False), (South 14, False)], actors = []}
-	room11		= {name = "room 1.1",   number = 12, roomStatus = detectors, inventory = [], exits = [(North 11, False), (South 15, False), (Up 2, False)], actors = []}
-	room12		= {name = "room 1.2",   number = 13, roomStatus = detectors, inventory = [], exits = [(North 11, False), (South 15, False), (East 14, False)], actors = []}
-	room13		= {name = "room 1.3",   number = 14, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 11, False), (South 15, False), (West 13, False)], actors = []}
-	corridor1	= {name = "corridor 1", number = 15, roomStatus = detectors, inventory = [], exits = [(North 12, False), (North 13, False), (North 14, False)
-                                                                                                     , (South 16, False), (South 17, False), (South 18, False)
-                                                                                                     ], actors = []}
-	room14		= {name = "room 1.4",   number = 16, roomStatus = detectors, inventory = [], exits = [(North 15, False), (South 19, False)], actors = []}
-	room15		= {name = "room 1.5",   number = 17, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 15, False), (South 19, False)], actors = []}
-	room16		= {name = "room 1.6",   number = 18, roomStatus = detectors, inventory = [], exits = [(North 15, False), (South 20, False)], actors = []}
-	room17		= {name = "room 1.7",   number = 19, roomStatus = detectors, inventory = [Blanket,Plug], exits = [(North 16, False), (North 17, False)], actors = []}
-	room18		= {name = "room 1.8",   number = 20, roomStatus = detectors, inventory = [FireExtinguisher], exits = [(North 18, False), (Up 10, False)], actors = []}
-	
-	detectors = [FireDetector False,SmokeDetector False,FloodDetector False]
+  back1     = {name = "back 1",     number = 11, exits = [South 12, South 13, South 14]}
+  room11    = {name = "room 1.1",   number = 12, exits = [North 11, South 15, Up 2]}
+  room12    = {name = "room 1.2",   number = 13, exits = [North 11, South 15, East 14]}
+  room13    = {name = "room 1.3",   number = 14, exits = [North 11, South 15, West 13]}
+  corridor1 = {name = "corridor 1", number = 15, exits = [ North 12, North 13, North 14
+                                                         , South 16, South 17, South 18
+                                                         ]}
 
+  room14    = {name = "room 1.4",   number = 16, exits = [North 15, South 19]}
+  room15    = {name = "room 1.5",   number = 17, exits = [North 15, South 19]}
+  room16    = {name = "room 1.6",   number = 18, exits = [North 15, South 20]}
+  room17    = {name = "room 1.7",   number = 19, exits = [North 16, North 17]}
+  room18    = {name = "room 1.8",   number = 20, exits = [North 18, Up 10]}
 
 // making an image from the map ...
 
-mapImage :: !Bool !(!MyMap, MapClick) !*TagSource -> Image (a, MapClick)
-mapImage mngmnt (m, _) tsrc
+
+mapImage :: !Bool !DungeonMap !(!(!MyRoomStatusMap, !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
+mapImage mngmnt m ((statusMap, actorMap), _) tsrc
   #! (floors, tsrc) = mapSt (floorImage mngmnt) (zip2 m (reverse [0..length m])) tsrc
   #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
-  #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True), "Fire detected")
+  #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True),  "Fire detected")
                       , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
                       , (mkStatusBadgeBackground (FloodDetector True), "Flood detected")
-                      , (mkActorBadgeBackground Available, "Available person")
-                      , (mkActorBadgeBackground NotAvailable, "Unavailable person")
-                      , (mkActorBadgeBackground Busy, "Busy person")
-                      , (mkInventoryBadgeBackground, "Room inventory")
-                      , (mkUpDown (Up 0, False), "Staircase up")
-                      , (mkUpDown (Down 0, False), "Staircase down")
+                      , (mkActorBadgeBackground Available,             "Available person")
+                      , (mkActorBadgeBackground NotAvailable,          "Unavailable person")
+                      , (mkActorBadgeBackground Busy,                  "Busy person")
+                      , (mkInventoryBadgeBackground,                   "Room inventory")
+                      , (mkUpDown 0 (Up 0) 'DM'.newMap,                "Staircase up")
+                      , (mkUpDown 0 (Down 0) 'DM'.newMap,              "Staircase down")
                       ]
   #! legendElems    = map (\(img, descr) -> beside (repeat AtMiddleY) [] [img, text myFontDef (" " +++ descr)] Nothing) legendElems
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !Bool !(!MyFloor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+floorImage :: !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
   #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
   = (floor, tsrc)
   where
-  f :: ![MyRoom] !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+  f :: ![Room] !*TagSource -> *(!Image (a, MapClick), !*TagSource)
   f rooms tsrc
-    #! (rooms`, tsrc) = mapSt (roomImage` mngmnt False) rooms tsrc
+    #! (rooms`, tsrc) = mapSt (roomImage` mngmnt False 'DM'.newMap /* TODO FIXME */) rooms tsrc
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 64.0
@@ -189,12 +217,12 @@ exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !Bool !(Maybe MyRoom) !*TagSource -> Image (a, MapClick)
-roomImage zoomed (Just room) tsrc = fst (roomImage` False zoomed room tsrc)
+roomImage :: !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
+roomImage zoomed (Just room) tsrc = fst (roomImage` False zoomed 'DM'.newMap /* TODO FIXME */ room tsrc)
 roomImage _ _ _                   = empty zero zero
 
-roomImage` :: !Bool !Bool !MyRoom !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} tsrc
+roomImage` :: !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+roomImage` mngmnt zoomed exitLocks room=:{number, exits} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
   #! numNorth       = length northEs
   #! numSouth       = length southEs
@@ -207,14 +235,17 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
   #! bgHeight       = multiplier * roomDim * heightMul
   #! bg             = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
   #! bg             = bg <@< { onclick = onClick (SelectRoom number), local = False }
-  #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
+  #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] []) Nothing // TODO FIXME roomStatus) Nothing
+  #! actors         = [] // TODO FIXME
   #! actorBadges    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
-  #! numInv         = length inventory
-  #! inventoryBadge = if (numInv > 0)
-                        (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
-                        (empty zero zero)
+  #! inventoryBadge = empty zero zero
+  // TODO FIXME
+  //#! numInv         = length inventory
+  //#! inventoryBadge = if (numInv > 0)
+                        //(beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
+                        //(empty zero zero)
   #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
-  #! upDownExits    = above (repeat AtMiddleX) [] (map (\x=:(e, _) -> scale multiplier multiplier (mkUpDown x) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
+  #! upDownExits    = above (repeat AtMiddleX) [] (map (\e -> scale multiplier multiplier (mkUpDown number e exitLocks) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
   #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numNorth (AtLeft, AtTop)    northEs
   #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numSouth (AtLeft, AtBottom) southEs
   #! (rExitAligns,   rExitOffsets,   rExitImgs)   = mkAsOsIs multiplier (\sp -> (zero, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numEast  (AtRight, AtTop)   eastEs
@@ -224,15 +255,15 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
                               ([statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
   = (total, tsrc)
   where
-  foldExit :: !(!Exit, !Locked) !(![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)]) -> (![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)], ![(!Exit, !Locked)])
-  foldExit e=:(North _, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
-  foldExit e=:(East _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
-  foldExit e=:(South _, _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
-  foldExit e=:(West _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [e : westEs], upEs, downEs)
-  foldExit e=:(Up _, _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
-  foldExit e=:(Down _, _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
+  foldExit :: !Exit !(![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit]) -> (![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit])
+  foldExit e=:(North _) (northEs, eastEs, southEs, westEs, upEs, downEs) = ([e : northEs], eastEs, southEs, westEs, upEs, downEs)
+  foldExit e=:(East _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, [e : eastEs], southEs, westEs, upEs, downEs)
+  foldExit e=:(South _) (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, [e : southEs], westEs, upEs, downEs)
+  foldExit e=:(West _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, [e : westEs], upEs, downEs)
+  foldExit e=:(Up _)    (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, [e : upEs], downEs)
+  foldExit e=:(Down _)  (northEs, eastEs, southEs, westEs, upEs, downEs) = (northEs, eastEs, southEs, westEs, upEs, [e : downEs])
 
-  mkAsOsIs :: !Real !(Span -> (!Span, !Span)) !(Image (a, MapClick)) !Real !Int !(!XAlign, !YAlign) ![(!Exit, !Locked)]
+  mkAsOsIs :: !Real !(Span -> (!Span, !Span)) !(Image (a, MapClick)) !Real !Int !(!XAlign, !YAlign) ![Exit]
             -> (![(!XAlign, !YAlign)], ![(!Span, !Span)], [Image (a, MapClick)])
   mkAsOsIs multiplier mkTuple doorImg bgSize num align es
     #! exitAligns  = repeatn num align
@@ -241,7 +272,10 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
     = (exitAligns, exitOffsets, exitImgs)
     where
     //mkDoor :: !(!Exit, !Locked) -> Image (a, MapClick)
-    mkDoor (exit, locked)
+    mkDoor exit
+      #! locked = case 'DM'.get (number, exit) exitLocks of
+                    Just b -> b
+                    _      -> False
       = doorImg
           <@< { stroke = toSVGColor "black" }
           <@< { strokewidth = px 1.0 }
@@ -251,11 +285,13 @@ roomImage` mngmnt zoomed room=:{number, exits, roomStatus, actors, inventory} ts
 //onClick :: !MapClick Int (a, MapClick) -> (a, MapClick)
 onClick clck _ (m, _) = (m, clck)
 
-mkUpDown :: !(!Exit, !Locked) -> Image (a, MapClick)
-mkUpDown (e=:(Up _), l)
+mkUpDown :: !RoomNumber !Exit !RoomExitLockMap -> Image (a, MapClick)
+mkUpDown roomNo (Up _) exitLocks
+  # l = False // TODO FIXME
   = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
-mkUpDown (e=:(Down _), l)
+mkUpDown roomNo (Down _) exitLocks
+  # l = False // TODO FIXME
   = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
       <@< { opacity = if l 0.3 1.0 }
 

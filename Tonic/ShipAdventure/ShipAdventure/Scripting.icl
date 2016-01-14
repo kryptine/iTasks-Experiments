@@ -1,26 +1,12 @@
 implementation module ShipAdventure.Scripting
- 
+
 import iTasks
- 
+
 import ShipAdventure.Types
 import ShipAdventure.PathFinding
+import ShipAdventure.Util
 
 // scripted simulation
-
-:: Target		= 	Room Int
-				|	Nearest Object
-				|	TargetRoom
-:: Script		=	MoveTo Target
-				|	Take Object
-				|	Drop Object
-				|	Use Object
-				|	ReSetTargetDetector 
-				|	If Condition [Script] [Script]
-:: Condition	=	ObjectInCurrentRoom Object
-				|	CarriesObject Object
-				|	ActorStatus ActorStatus
-				|	And Condition Condition
-				|	Or Condition Condition
 
 derive class iTask Target, Script, Condition
 
@@ -54,48 +40,59 @@ changeScript prompt script
 
 interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
 interperScript (targetRoom,detector) user script
-	= 						get myMap
-	>>= \map			->	perform script (fromJust (findUser user map))
-where
-	perform :: [Script] (RoomNumber,MyActor) -> Task Bool
-	perform [] (actorLoc,actor)								
-		=	return True	
+  =                get myActorMap
+  >>= \actorMap -> perform script (fromJust (findUser user actorMap))
+  where
+  perform :: [Script] (RoomNumber,MyActor) -> Task Bool
+  perform [] (actorLoc, actor) = return True
 
-	perform [MoveTo target:next] (actorLoc,actor)	
-		=					get myMap
-		>>= \curMap ->		let newLoc  = whereIs target actorLoc curMap 
-							in	autoMove actorLoc newLoc shipShortestPath actor myMap
-								>>| perform next (newLoc,actor) 
-	perform [Take object:next] (actorLoc,actor)	
-		=					pickupObject actorLoc object actor myMap
-		>>|					perform next (actorLoc,actor)
-	perform [Drop object:next] (actorLoc,actor)	
-		=					dropDownObject actorLoc object actor myMap
-		>>|					perform next (actorLoc,actor)
-	perform [Use object:next] (actorLoc,actor)	
-		=					useObject actorLoc object actor myMap
-		>>|					perform next (actorLoc,actor)
-	perform [ReSetTargetDetector:next] (actorLoc,actor)	
-		=					setAlarm actor.userName (targetRoom,detector) False myMap
-		>>|					perform next (actorLoc,actor)
-	perform [If condition script1 script2:next] (actorLoc,actor)
-		=					get myMap
-		>>= \map ->			if (isTrue condition map (actorLoc,actor))  (perform (script1 ++ next) (actorLoc,actor)) 
-												      					(perform (script2 ++ next) (actorLoc,actor))
+  perform [MoveTo target:next] (actorLoc,actor)
+  	=                 get myStatusMap
+      >>= \statusMap -> get myInventoryMap
+      >>= \invMap    -> get exitLockShare
+      >>= \exitLocks -> let newLoc  = whereIs target actorLoc statusMap invMap exitLocks myMap
+                        in  autoMove actorLoc newLoc shipShortestPath actor myStatusMap myActorMap myMap
+                            >>| perform next (newLoc,actor) 
+  perform [Take objType`:next] (actorLoc,actor)	
+    # room = fromJust (getRoomFromMap actorLoc myMap)
+    = // TODO FIXME case [obj \\ obj=:{Object | objType } <- room.inventory | objType` == objType] of
+      case [] of
+        [obj : _] =   pickupObject actorLoc obj actor myActorMap myInventoryMap
+                  >>| perform next (actorLoc,actor)
+        _ = perform next (actorLoc, actor)
+  perform [Drop objType`:next] (actorLoc,actor)	
+      = case [obj \\ obj=:{Object | objType } <- actor.carrying | objType` == objType] of
+          [obj : _]
+            =   return () // TODO FIXME dropDownObject actorLoc obj actor myMap
+            >>| perform next (actorLoc,actor)
+          _ = perform next (actorLoc,actor)
+  perform [Use objType`:next] (actorLoc,actor)	
+      = case [obj \\ obj=:{Object | objType } <- actor.carrying | objType` == objType] of
+          [obj : _]
+            =   useObject actorLoc obj actor myActorMap
+            >>| perform next (actorLoc,actor)
+          _ = perform next (actorLoc,actor)
+  perform [ReSetTargetDetector:next] (actorLoc,actor)	
+    =   setAlarm actor.userName (targetRoom,detector) False myStatusMap
+    >>| perform next (actorLoc,actor)
+  perform [If condition script1 script2:next] (actorLoc,actor)
+    | isTrue condition myMap (actorLoc,actor) = perform (script1 ++ next) (actorLoc, actor)
+    | otherwise                               = perform (script2 ++ next) (actorLoc, actor)
 
-	isTrue (ObjectInCurrentRoom object) map (actorLoc,actor)
-		=	isMember object (fromJust (getRoomFromMap actorLoc map)).inventory
-	isTrue (CarriesObject object) map (actorLoc,actor)
-		=	isMember object actor.carrying
-	isTrue (ActorStatus status) map (actorLoc,actor)
-		=	status === actor.actorStatus
-	isTrue (And cond1 cond2) map (actorLoc,actor)
-		=	and [isTrue cond1 map (actorLoc,actor), isTrue cond2 map (actorLoc,actor)] 
-	isTrue (Or cond1 cond2) map (actorLoc,actor)
-		=	or [isTrue cond1 map (actorLoc,actor), isTrue cond2 map (actorLoc,actor)] 
+  isTrue (ObjectInCurrentRoom object) map (actorLoc,actor)
+  	// TODO FIXME = objTypeInList object (fromJust (getRoomFromMap actorLoc map)).inventory
+  	= False
+  isTrue (CarriesObject object) map (actorLoc,actor)
+  	= isCarrying object actor
+  isTrue (ActorStatus status) map (actorLoc,actor)
+  	= status === actor.actorStatus
+  isTrue (And cond1 cond2) map (actorLoc,actor)
+  	= and [isTrue cond1 map (actorLoc,actor), isTrue cond2 map (actorLoc,actor)] 
+  isTrue (Or cond1 cond2) map (actorLoc,actor)
+  	= or [isTrue cond1 map (actorLoc,actor), isTrue cond2 map (actorLoc,actor)] 
 
 
-	whereIs (Room nr) actorLoc curMap			= nr
-	whereIs (Nearest object) actorLoc curMap	= let (_,_,_,(objectLoc,_,_)) = smartShipPathToClosestObject object actorLoc targetRoom curMap in objectLoc
-	whereIs TargetRoom actorLoc curMap		    = targetRoom
+  whereIs (Room nr) actorLoc _ _ _ curMap                                   = nr
+  whereIs (Nearest object) actorLoc statusMap inventoryMap exitLocks curMap = let (_,_,_,_,(objectLoc,_,_)) = smartShipPathToClosestObject object actorLoc targetRoom statusMap inventoryMap exitLocks curMap in objectLoc
+  whereIs TargetRoom actorLoc _ _ _ curMap                                  = targetRoom
 
