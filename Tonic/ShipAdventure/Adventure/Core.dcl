@@ -116,6 +116,7 @@ pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (S
 dropObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
            -> Task Bool | iTask o & iTask a & Eq o
 useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
+getObjectOfType :: (Actor o a) o -> Object o | iTask o & iTask a
 
 // given a shortest path algorithm, the current location and the kind of object one searches for
 // returns: number of objects found, location of the closest object, distance to that object, shortest path to that object

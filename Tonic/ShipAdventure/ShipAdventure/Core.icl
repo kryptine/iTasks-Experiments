@@ -169,10 +169,10 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
                                , ("Closest FireBlanket (" <+++ nrFireBlankets <+++ " in reach)", roomToString blanketLoc, goto dirFireBlanket, roomToString distFireBlankets,           toString bCost)
                                , ("Closest plug (" <+++ nrPlugs <+++ " in reach)",               roomToString plugLoc,    goto dirPlug,        roomToString distPlugs,                  toString pCost)
                                ])) @! ()
-                      >>* [ /* TODO FIXME Needs to be dynamic and specific to the individual resources being carried OnAction (Action "Use Fire Extinguisher" []) (ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
-                          , OnAction (Action "Use FireBlanket" [])       (ifCond (mayUseFireBlanket detector) (return (Just useFireBlanket)))
-                          , OnAction (Action "Use Plug" [])              (ifCond (mayUsePlug detector)        (return (Just usePlug)))
-                          ,*/ OnAction (Action "Smoke Investigated" [])  (ifCond (mayDetectedSmoke detector)  (return (Just smokeReport)))
+                      >>* [ OnAction (Action "Use Fire Extinguisher" []) (ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
+                          , OnAction (Action "Use FireBlanket" [])       (ifCond (mayUseFireBlanket detector)  (return (Just useFireBlanket)))
+                          , OnAction (Action "Use Plug" [])              (ifCond (mayUsePlug detector)         (return (Just usePlug)))
+                          , OnAction (Action "Smoke Investigated" [])    (ifCond (mayDetectedSmoke detector)   (return (Just smokeReport)))
                           , OnAction (Action "I give up" [])             (always (return (Just giveUp)))
                           ])
     where
@@ -188,23 +188,23 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
     mayDetectedSmoke (SmokeDetector True)  = curRoom.number == alarmLoc
     mayDetectedSmoke _                     = False
 
-    //useExtinquisher =   useObject alarmLoc FireExtinguisher curActor myMap
-                    //>>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
-                    //>>| updStatusOfActor curActor.userName Available
-                    //>>| viewInformation "Well Done, Fire Extinguished !" [] ()
-                    //>>| return (Just "Fire Extinguised")
+    useExtinquisher =   useObject alarmLoc (getObjectOfType curActor FireExtinguisher) curActor myActorMap
+                    >>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+                    >>| updStatusOfActor curActor.userName Available
+                    >>| viewInformation "Well Done, Fire Extinguished !" [] ()
+                    >>| return (Just "Fire Extinguised")
 
-    //useFireBlanket      =   useObject alarmLoc FireBlanket curActor myMap
-                    //>>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
-                    //>>| updStatusOfActor curActor.userName Available
-                    //>>| viewInformation "Well Done, Fire Extinguished !" [] ()
-                    //>>| return (Just "Fire Extinguised")
+    useFireBlanket  =   useObject alarmLoc (getObjectOfType curActor FireBlanket) curActor myActorMap
+                    >>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+                    >>| updStatusOfActor curActor.userName Available
+                    >>| viewInformation "Well Done, Fire Extinguished !" [] ()
+                    >>| return (Just "Fire Extinguised")
 
-    //usePlug         =   useObject alarmLoc Plug curActor myMap
-                    //>>| setAlarm actor.userName (alarmLoc,detector) False myMap
-                    //>>| updStatusOfActor curActor.userName Available
-                    //>>| viewInformation "Well Done, Flooding Stopped !" [] ()
-                    //>>| return (Just "Flooding Stopped")
+    usePlug         =   useObject alarmLoc (getObjectOfType curActor Plug) curActor myActorMap
+                    >>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+                    >>| updStatusOfActor curActor.userName Available
+                    >>| viewInformation "Well Done, Flooding Stopped !" [] ()
+                    >>| return (Just "Flooding Stopped")
 
     smokeReport     =   setAlarm actor.userName (alarmLoc,detector) False myStatusMap
                     >>| updStatusOfActor curActor.userName Available

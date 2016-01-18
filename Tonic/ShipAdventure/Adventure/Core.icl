@@ -238,6 +238,10 @@ useObject roomNumber object actor shRoomActorMap
   =   updateActor roomNumber {actor & carrying = removeMember object actor.carrying} shRoomActorMap
   >>| return True
 
+getObjectOfType :: (Actor o a) o -> Object o | iTask o & iTask a
+getObjectOfType {Actor | carrying} objType` = case [obj \\ obj <- carrying | obj.objType === objType`] of
+                                                [x : _] -> x
+
 // auto moves around the maze
 
 autoMove :: RoomNumber RoomNumber
