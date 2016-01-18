@@ -8,6 +8,7 @@ import qualified Data.List as DL
 from Data.Func import mapSt
 import StdArray
 import Data.Data
+import qualified Data.IntMap.Strict as DIS
 
 import ShipAdventure.Types, Adventure.Logging, ShipAdventure.Scripting
 import ShipAdventure.PathFinding, ShipAdventure.Util
@@ -333,6 +334,7 @@ findClosest myLoc targetLoc objectType statusMap inventoryMap exitLocks dungeonM
             [x:_] -> Just (obj, cost, fromExit x)
       _ = Nothing
 
+// TODO FIXME Get rid of the newMaps?
 mkRoom :: Room -> Task ()
-mkRoom room = viewInformation "Room Status" [imageView (\(room, _) -> roomImage True (Just room)) (\_ _ -> Nothing)] (room, NoMapClick) @! ()
+mkRoom room = viewInformation "Room Status" [imageView (\(room, _) -> roomImage 'DIS'.newMap 'DIS'.newMap 'DIS'.newMap True (Just room)) (\_ _ -> Nothing)] (room, NoMapClick) @! ()
 

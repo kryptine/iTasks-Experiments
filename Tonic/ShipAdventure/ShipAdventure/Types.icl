@@ -94,7 +94,7 @@ where
 
 setRoomDetectors :: Task ()
 setRoomDetectors 
-	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
+	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
       >>* [OnValue (\tv -> case tv of
                              Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myStatusMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
@@ -129,10 +129,10 @@ resetDetector (FloodDetector b) = FloodDetector False
 // general map viewing
 
 showMap :: Task MapClick
-showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
+showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
             >&> withSelection (return ())
                   (\mapClick -> case mapClick of
-                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(m, a) -> (getRoomFromMap selRoom myMap, a)) (\(room, _) -> roomImage True room) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
+                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(m, a) -> (getRoomFromMap selRoom myMap, a)) (\(room, _) -> roomImage 'DIS'.newMap 'DIS'.newMap 'DIS'.newMap /* TODO FIXME */ True room) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
                                   _ -> return NoMapClick)
 
 myMap :: DungeonMap // map of the ship
@@ -183,9 +183,9 @@ myMap = [floor0, floor1]
 // making an image from the map ...
 
 
-mapImage :: !Bool !DungeonMap !(!(!MyRoomStatusMap, !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
-mapImage mngmnt m ((statusMap, actorMap), _) tsrc
-  #! (floors, tsrc) = mapSt (floorImage mngmnt) (zip2 m (reverse [0..length m])) tsrc
+mapImage :: !Bool !DungeonMap !(!(!(MyRoomInventoryMap, !MyRoomStatusMap), !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
+mapImage mngmnt m (((inventoryMap, statusMap), actorMap), _) tsrc
+  #! (floors, tsrc) = mapSt (floorImage inventoryMap statusMap actorMap mngmnt) (zip2 m (reverse [0..length m])) tsrc
   #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
   #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True),  "Fire detected")
                       , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
@@ -201,15 +201,15 @@ mapImage mngmnt m ((statusMap, actorMap), _) tsrc
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-floorImage mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
+floorImage :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+floorImage inventoryMap statusMap actorMap mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
   #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
   = (floor, tsrc)
   where
   f :: ![Room] !*TagSource -> *(!Image (a, MapClick), !*TagSource)
   f rooms tsrc
-    #! (rooms`, tsrc) = mapSt (roomImage` mngmnt False 'DM'.newMap /* TODO FIXME */) rooms tsrc
+    #! (rooms`, tsrc) = mapSt (roomImage` inventoryMap statusMap actorMap mngmnt False 'DM'.newMap /* TODO FIXME */) rooms tsrc
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 64.0
@@ -217,12 +217,12 @@ exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
-roomImage zoomed (Just room) tsrc = fst (roomImage` False zoomed 'DM'.newMap /* TODO FIXME */ room tsrc)
-roomImage _ _ _                   = empty zero zero
+roomImage :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
+roomImage inventoryMap statusMap actorMap zoomed (Just room) tsrc = fst (roomImage` inventoryMap statusMap actorMap False zoomed 'DM'.newMap /* TODO FIXME */ room tsrc)
+roomImage _ _ _ _ _ _                                             = empty zero zero
 
-roomImage` :: !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-roomImage` mngmnt zoomed exitLocks room=:{number, exits} tsrc
+roomImage` :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number, exits} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
   #! numNorth       = length northEs
   #! numSouth       = length southEs
@@ -235,15 +235,21 @@ roomImage` mngmnt zoomed exitLocks room=:{number, exits} tsrc
   #! bgHeight       = multiplier * roomDim * heightMul
   #! bg             = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
   #! bg             = bg <@< { onclick = onClick (SelectRoom number), local = False }
-  #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] []) Nothing // TODO FIXME roomStatus) Nothing
-  #! actors         = [] // TODO FIXME
+  #! roomStatus     = case 'DIS'.get number statusMap of
+                        Just roomStatus -> roomStatus
+                        _               -> []
+  #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
+  #! actors         = case 'DIS'.get number actorMap of
+                        Just actors -> actors
+                        _           -> []
   #! actorBadges    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
-  #! inventoryBadge = empty zero zero
-  // TODO FIXME
-  //#! numInv         = length inventory
-  //#! inventoryBadge = if (numInv > 0)
-                        //(beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
-                        //(empty zero zero)
+  #! inventory      = case 'DIS'.get number inventoryMap of
+                        Just inv -> inv
+                        _        -> []
+  #! numInv         = length inventory
+  #! inventoryBadge = if (numInv > 0)
+                        (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
+                        (empty zero zero)
   #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
   #! upDownExits    = above (repeat AtMiddleX) [] (map (\e -> scale multiplier multiplier (mkUpDown number e exitLocks) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
   #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numNorth (AtLeft, AtTop)    northEs

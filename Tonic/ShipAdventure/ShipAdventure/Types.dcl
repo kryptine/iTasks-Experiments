@@ -84,5 +84,5 @@ resetDetector 	:: !Detector -> Detector
 showMap 			:: Task MapClick
 setRoomDetectors 	:: Task ()
 
-roomImage 	:: !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
+roomImage :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
 
