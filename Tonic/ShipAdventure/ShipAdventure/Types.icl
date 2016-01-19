@@ -236,8 +236,10 @@ roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number
   #! bg             = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
   #! bg             = bg <@< { onclick = onClick (SelectRoom number), local = False }
   #! roomStatus     = case 'DIS'.get number statusMap of
-                        Just roomStatus -> roomStatus
-                        _               -> []
+                        Just roomStatus = roomStatus
+                        _
+                        | mngmnt    = [FireDetector False, SmokeDetector False, FloodDetector False]
+                        | otherwise = []
   #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
   #! actors         = case 'DIS'.get number actorMap of
                         Just actors -> actors
