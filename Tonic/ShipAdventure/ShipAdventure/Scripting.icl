@@ -5,6 +5,7 @@ import iTasks
 import ShipAdventure.Types
 import ShipAdventure.PathFinding
 import ShipAdventure.Util
+import qualified Data.IntMap.Strict as DIS
 
 // scripted simulation
 
@@ -47,23 +48,25 @@ interperScript (targetRoom,detector) user script
   perform [] (actorLoc, actor) = return True
 
   perform [MoveTo target:next] (actorLoc,actor)
-  	=                 get myStatusMap
-      >>= \statusMap -> get myInventoryMap
-      >>= \invMap    -> get exitLockShare
-      >>= \exitLocks -> let newLoc  = whereIs target actorLoc statusMap invMap exitLocks myMap
-                        in  autoMove actorLoc newLoc shipShortestPath actor myStatusMap myActorMap myMap
-                            >>| perform next (newLoc,actor) 
+    =                 get myStatusMap
+    >>= \statusMap -> get myInventoryMap
+    >>= \invMap    -> get exitLockShare
+    >>= \exitLocks -> let newLoc  = whereIs target actorLoc statusMap invMap exitLocks myMap
+                      in  autoMove actorLoc newLoc shipShortestPath actor myStatusMap myActorMap myMap
+                          >>| perform next (newLoc,actor) 
   perform [Take objType`:next] (actorLoc,actor)	
-    # room = fromJust (getRoomFromMap actorLoc myMap)
-    = // TODO FIXME case [obj \\ obj=:{Object | objType } <- room.inventory | objType` == objType] of
-      case [] of
-        [obj : _] =   pickupObject actorLoc obj actor myActorMap myInventoryMap
-                  >>| perform next (actorLoc,actor)
-        _ = perform next (actorLoc, actor)
-  perform [Drop objType`:next] (actorLoc,actor)	
+    =              get myInventoryMap
+    >>= \invMap -> case 'DIS'.get actorLoc invMap of
+                     Just inv
+                       = case [obj \\ obj=:{Object | objType } <- inv | objType` == objType] of
+                           [obj : _] =   pickupObject actorLoc obj actor myActorMap myInventoryMap
+                                     >>| perform next (actorLoc,actor)
+                           _ = perform next (actorLoc, actor)
+                     _ = perform next (actorLoc, actor)
+  perform [Drop objType`:next] (actorLoc,actor)
       = case [obj \\ obj=:{Object | objType } <- actor.carrying | objType` == objType] of
           [obj : _]
-            =   return () // TODO FIXME dropDownObject actorLoc obj actor myMap
+            =   dropObject actorLoc obj actor myActorMap myInventoryMap
             >>| perform next (actorLoc,actor)
           _ = perform next (actorLoc,actor)
   perform [Use objType`:next] (actorLoc,actor)	
@@ -76,20 +79,22 @@ interperScript (targetRoom,detector) user script
     =   setAlarm actor.userName (targetRoom,detector) False myStatusMap
     >>| perform next (actorLoc,actor)
   perform [If condition script1 script2:next] (actorLoc,actor)
-    | isTrue condition myMap (actorLoc,actor) = perform (script1 ++ next) (actorLoc, actor)
-    | otherwise                               = perform (script2 ++ next) (actorLoc, actor)
+    =              get myInventoryMap
+    >>= \invMap -> case 'DIS'.get actorLoc invMap of
+                     Just inv
+                       | isTrue inv condition myMap (actorLoc,actor) = perform (script1 ++ next) (actorLoc, actor)
+                       | otherwise                                   = perform (script2 ++ next) (actorLoc, actor)
 
-  isTrue (ObjectInCurrentRoom object) map (actorLoc,actor)
-  	// TODO FIXME = objTypeInList object (fromJust (getRoomFromMap actorLoc map)).inventory
-  	= False
-  isTrue (CarriesObject object) map (actorLoc,actor)
+  isTrue inv (ObjectInCurrentRoom object) map (actorLoc,actor)
+    = objTypeInList object inv
+  isTrue inv (CarriesObject object) map (actorLoc,actor)
   	= isCarrying object actor
-  isTrue (ActorStatus status) map (actorLoc,actor)
+  isTrue inv (ActorStatus status) map (actorLoc,actor)
   	= status === actor.actorStatus
-  isTrue (And cond1 cond2) map (actorLoc,actor)
-  	= and [isTrue cond1 map (actorLoc,actor), isTrue cond2 map (actorLoc,actor)] 
-  isTrue (Or cond1 cond2) map (actorLoc,actor)
-  	= or [isTrue cond1 map (actorLoc,actor), isTrue cond2 map (actorLoc,actor)] 
+  isTrue inv (And cond1 cond2) map (actorLoc,actor)
+  	= and [isTrue inv cond1 map (actorLoc,actor), isTrue inv cond2 map (actorLoc,actor)] 
+  isTrue inv (Or cond1 cond2) map (actorLoc,actor)
+  	= or [isTrue inv cond1 map (actorLoc,actor), isTrue inv cond2 map (actorLoc,actor)] 
 
 
   whereIs (Room nr) actorLoc _ _ _ curMap                                   = nr
