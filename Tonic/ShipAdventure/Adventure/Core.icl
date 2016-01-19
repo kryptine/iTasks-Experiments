@@ -299,31 +299,29 @@ updActorStatus user upd smap
 // room status updating
 
 toggleExit :: RoomNumber Exit DungeonMap -> Task ()
-toggleExit roomNo exit smap = updExit roomNo exit smap not
+toggleExit roomNo exit dungeonMap
+  =             get exitLockShare
+  >>= \locks -> set (newLocks locks) exitLockShare @! ()
+  where
+  newLocks locks
+    # locked = case 'DM'.get (roomNo, exit) locks of
+                 Just locked = locked
+                 _ = False
+    # inverseExit = case [(roomNo, exit`) \\ floor <- dungeonMap, layer <- floor, room <- layer, exit` <- room.exits | interestingExit exit room.number exit`] of
+                      [x : _] -> x
+    # locks = 'DM'.put (roomNo, exit) (not locked) locks
+    = 'DM'.put inverseExit (not locked) locks
 
-lockExit :: RoomNumber Exit DungeonMap -> Task ()
-lockExit roomNo exit smap = updExit roomNo exit smap (const True)
+  interestingExit :: !Exit !RoomNumber !Exit -> Bool
+  interestingExit ie roomNo` e = (roomNo == roomNo` && e == exit) || (roomNo` == fromExit exit && e == ie)
 
-unlockExit :: RoomNumber Exit DungeonMap -> Task ()
-unlockExit roomNo exit smap = updExit roomNo exit smap (const False)
-
-updExit :: RoomNumber Exit DungeonMap (Locked -> Locked) -> Task ()
-updExit roomNo exit smap lockf = return () // TODO FIXME
-  //= upd (map (map (map (updRoom (inverseExit exit))))) smap @! ()
-  //where
-  //updRoom :: !Exit !Room -> Room
-  //updRoom ie r = r // TODO FIXME {r & exits = [if (interestingExit ie r e) (e, lockf l) (e, l)  \\ (e, l) <- r.exits] }
-
-  //interestingExit :: !Exit !Room !Exit -> Bool
-  //interestingExit ie r e = (r.number == roomNo && e == exit) || (r.number == fromExit exit && e == ie)
-
-  //inverseExit :: !Exit -> Exit
-  //inverseExit (North _) = South roomNo
-  //inverseExit (South _) = North roomNo
-  //inverseExit (East _)  = West roomNo
-  //inverseExit (West _)  = East roomNo
-  //inverseExit (Up _)    = Down roomNo
-  //inverseExit (Down _)  = Up roomNo
+  inverseExit :: !Exit -> Exit
+  inverseExit (North _) = South roomNo
+  inverseExit (South _) = North roomNo
+  inverseExit (East _)  = West roomNo
+  inverseExit (West _)  = East roomNo
+  inverseExit (Up _)    = Down roomNo
+  inverseExit (Down _)  = Up roomNo
 
 getRoomFromMap :: RoomNumber DungeonMap -> Maybe Room
 getRoomFromMap roomNumber m

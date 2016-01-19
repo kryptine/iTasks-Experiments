@@ -99,8 +99,6 @@ getRoomFromMap 	:: RoomNumber DungeonMap -> Maybe Room
 updRoomStatus :: RoomNumber (r -> r) (Shared (RoomStatusMap r)) -> Task () | iTask r
 
 toggleExit :: RoomNumber Exit DungeonMap -> Task ()
-lockExit   :: RoomNumber Exit DungeonMap -> Task ()
-unlockExit :: RoomNumber Exit DungeonMap -> Task ()
 
 // shortest path calculation
 
