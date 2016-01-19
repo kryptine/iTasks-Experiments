@@ -21,7 +21,6 @@ import Adventure.Core
 				| 	SmokeDetector Bool
                 | 	FloodDetector Bool
 
-
 :: ObjectType	= 	FireExtinguisher
 				| 	FireBlanket
 				| 	Plug
@@ -34,9 +33,11 @@ import Adventure.Core
 :: Availability	=	Available | NotAvailable | Busy  
 :: Priority		=	Low | Normal | High | Highest
 
+:: CableId :== Int
+
 // cableId and inRoom together form pri-key for Cable
 :: Cable =
-  { cableId    :: Int
+  { cableId    :: CableId
   , inRoom     :: RoomNumber
   , connectsTo :: CableConnection
   }

@@ -199,7 +199,10 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
   exitActions room nactor exitLocks
     = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) nactor shRoomActorMap))
       \\ exit <- room.exits
-      | 'DM'.get (room.number, exit) exitLocks == Just False
+      | case 'DM'.get (room.number, exit) exitLocks of
+          Just False -> True
+          Nothing    -> True
+          _          -> False
       ]
   inventoryActions room roomInventory nactor
     = case 'DIS'.get room.number roomInventory of
@@ -260,11 +263,11 @@ autoMove thisRoom target pathFun actor shStatusMap shActorMap dungeonMap
                             = case pathFun thisRoom target statusMap exitLocks dungeonMap of
                                 Just (path=:[_:_], _)
                                   # nextRoom = fromExit (hd path)
-                                  =     waitForTimer {Time | hour = 0, min = 0, sec = delay}
-                                    >>| move room.number nextRoom actor shActorMap
-                                    >>| addLog actor.userName "" ("Has moved to Room " <+++ nextRoom)
-                                    >>| waitForTimer {Time | hour = 0, min = 0, sec = delay}
-                                    >>| autoMove nextRoom target pathFun actor shStatusMap shActorMap dungeonMap
+                                  =   waitForTimer {Time | hour = 0, min = 0, sec = delay}
+                                  >>| move room.number nextRoom actor shActorMap
+                                  >>| addLog actor.userName "" ("Has moved to Room " <+++ nextRoom)
+                                  >>| waitForTimer {Time | hour = 0, min = 0, sec = delay}
+                                  >>| autoMove nextRoom target pathFun actor shStatusMap shActorMap dungeonMap
                                 _ = return False
                           _ = return False
 
