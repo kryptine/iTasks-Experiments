@@ -333,5 +333,5 @@ findClosest myLoc targetLoc objectType statusMap inventoryMap exitLocks dungeonM
       _ = Nothing
 
 mkRoom :: MyMkRoom
-mkRoom = \shStatusMap shRoomActorMap shRoomInventoryMap room -> viewSharedInformation "Room Status" [imageView (\x -> (x, NoMapClick)) (\(((statusMap, actorMap), invMap), _) -> roomImage invMap statusMap actorMap True (Just room)) (\_ _ -> Nothing)] (shStatusMap |+| shRoomActorMap |+| shRoomInventoryMap) @! ()
+mkRoom = \shStatusMap shRoomActorMap shRoomInventoryMap room -> viewSharedInformation "Room Status" [imageView (\x -> (x, NoMapClick)) (\((((exitLocks, statusMap), actorMap), invMap), _) -> roomImage exitLocks invMap statusMap actorMap True (Just room)) (\_ _ -> Nothing)] (exitLockShare |+| shStatusMap |+| shRoomActorMap |+| shRoomInventoryMap) @! ()
 

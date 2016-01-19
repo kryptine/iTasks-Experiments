@@ -94,7 +94,7 @@ where
 
 setRoomDetectors :: Task ()
 setRoomDetectors 
-	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
       >>* [OnValue (\tv -> case tv of
                              Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myStatusMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
@@ -129,10 +129,10 @@ resetDetector (FloodDetector b) = FloodDetector False
 // general map viewing
 
 showMap :: Task MapClick
-showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
             >&> withSelection (return ())
                   (\mapClick -> case mapClick of
-                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(m, a) -> (getRoomFromMap selRoom myMap, a)) (\(room, _) -> roomImage 'DIS'.newMap 'DIS'.newMap 'DIS'.newMap /* TODO FIXME */ True room) (\_ _ -> Nothing) (const snd)] (myStatusMap |+| myActorMap) NoMapClick
+                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\((((exitLocks, invMap), statusMap), actorMap), a) -> ((exitLocks, invMap, statusMap, actorMap, getRoomFromMap selRoom myMap), a)) (\((exitLocks, invMap, statusMap, actorMap, room), _) -> roomImage exitLocks invMap statusMap actorMap True room) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
                                   _ -> return NoMapClick)
 
 myMap :: DungeonMap // map of the ship
@@ -183,9 +183,9 @@ myMap = [floor0, floor1]
 // making an image from the map ...
 
 
-mapImage :: !Bool !DungeonMap !(!(!(MyRoomInventoryMap, !MyRoomStatusMap), !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
-mapImage mngmnt m (((inventoryMap, statusMap), actorMap), _) tsrc
-  #! (floors, tsrc) = mapSt (floorImage inventoryMap statusMap actorMap mngmnt) (zip2 m (reverse [0..length m])) tsrc
+mapImage :: !Bool !DungeonMap !(!(!(!(!RoomExitLockMap, !MyRoomInventoryMap), !MyRoomStatusMap), !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
+mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
+  #! (floors, tsrc) = mapSt (floorImage exitLocks inventoryMap statusMap actorMap mngmnt) (zip2 m (reverse [0..length m])) tsrc
   #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
   #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True),  "Fire detected")
                       , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
@@ -201,15 +201,15 @@ mapImage mngmnt m (((inventoryMap, statusMap), actorMap), _) tsrc
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-floorImage inventoryMap statusMap actorMap mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
+floorImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+floorImage exitLocks inventoryMap statusMap actorMap mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
   #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
   = (floor, tsrc)
   where
   f :: ![Room] !*TagSource -> *(!Image (a, MapClick), !*TagSource)
   f rooms tsrc
-    #! (rooms`, tsrc) = mapSt (roomImage` inventoryMap statusMap actorMap mngmnt False 'DM'.newMap /* TODO FIXME */) rooms tsrc
+    #! (rooms`, tsrc) = mapSt (roomImage` inventoryMap statusMap actorMap mngmnt False exitLocks) rooms tsrc
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 64.0
@@ -217,9 +217,9 @@ exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
-roomImage inventoryMap statusMap actorMap zoomed (Just room) tsrc = fst (roomImage` inventoryMap statusMap actorMap False zoomed 'DM'.newMap /* TODO FIXME */ room tsrc)
-roomImage _ _ _ _ _ _                                             = empty zero zero
+roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
+roomImage exitLocks inventoryMap statusMap actorMap zoomed (Just room) tsrc = fst (roomImage` inventoryMap statusMap actorMap False zoomed exitLocks room tsrc)
+roomImage _ _ _ _ _ _ _                                                     = empty zero zero
 
 roomImage` :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number, exits} tsrc
@@ -277,7 +277,6 @@ roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number
     #! exitImgs    = map mkDoor es
     = (exitAligns, exitOffsets, exitImgs)
     where
-    //mkDoor :: !(!Exit, !Locked) -> Image (a, MapClick)
     mkDoor exit
       #! locked = case 'DM'.get (number, exit) exitLocks of
                     Just b -> b
@@ -292,14 +291,14 @@ roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number
 onClick clck _ (m, _) = (m, clck)
 
 mkUpDown :: !RoomNumber !Exit !RoomExitLockMap -> Image (a, MapClick)
-mkUpDown roomNo (Up _) exitLocks
-  # l = False // TODO FIXME
-  = polygon Nothing [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
-      <@< { opacity = if l 0.3 1.0 }
-mkUpDown roomNo (Down _) exitLocks
-  # l = False // TODO FIXME
-  = polygon Nothing [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
-      <@< { opacity = if l 0.3 1.0 }
+mkUpDown roomNo e exitLocks
+  # l = case 'DM'.get (roomNo, e) exitLocks of
+          Just x -> x
+          _      -> False
+  # ps = case e of
+           (Up _) -> [(px 0.0, px 0.0), (px 12.0, px -12.0), (px 12.0, px 0.0)]
+           _      -> [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
+  = polygon Nothing ps <@< { opacity = if l 0.3 1.0 }
 
 mkStatusBadge :: Int !Bool !Real !Detector ![Image (a, MapClick)] -> [Image (a, MapClick)]
 mkStatusBadge roomNo mngmnt badgeMult d acc
