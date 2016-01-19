@@ -9,6 +9,8 @@ import Adventure.Core
 :: MyRoomInventoryMap :== RoomInventoryMap ObjectType
 :: MyRoomActorMap     :== RoomActorMap ObjectType ActorStatus
 
+:: MyMkRoom :== MkRoom RoomStatus ObjectType ActorStatus
+
 :: MapClick     = NoMapClick
                 | SelectRoom RoomNumber
                 | ToggleAlarm RoomNumber Detector

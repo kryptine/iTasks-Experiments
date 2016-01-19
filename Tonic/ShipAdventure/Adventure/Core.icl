@@ -157,7 +157,7 @@ fromExit (Down  i) = i
 
 // moving around in the map
 
-addActorToMap :: (Room -> Task ()) (Actor o a) RoomNumber (Shared (RoomStatusMap r))
+addActorToMap :: (MkRoom r o a) (Actor o a) RoomNumber (Shared (RoomStatusMap r))
                  (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
               -> Task () | iTask r & iTask o & iTask a & Eq o
 addActorToMap roomViz actor location shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap
@@ -169,13 +169,13 @@ addActorToMap roomViz actor location shStatusMap shRoomActorMap shRoomInventoryM
   noTask :: Maybe (ActorTask r o a ()) | iTask o & iTask a & Eq o
   noTask = Nothing
 
-moveAround :: (Room -> Task ()) (Actor o a) (Maybe (ActorTask r o a b))
+moveAround :: (MkRoom r o a) (Actor o a) (Maybe (ActorTask r o a b))
               (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
            -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 moveAround roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap
   = repeatTask (\_ -> moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap) isJust Nothing
 
-moveOneStep :: (Room -> Task ()) (Actor o a) (Maybe (ActorTask r o a b))
+moveOneStep :: (MkRoom r o a) (Actor o a) (Maybe (ActorTask r o a b))
                (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
             -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap dungeonMap
@@ -183,7 +183,7 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
       (\(((statusMap, roomActorMap), roomInventory), exitLocks)
          -> case findActorRoom actor roomActorMap dungeonMap of
               Just room
-                = ( roomViz room
+                = ( roomViz shStatusMap shRoomActorMap shRoomInventoryMap room
                     >>* (  exitActions room actor exitLocks
                         ++ inventoryActions room roomInventory actor
                         ++ carryActions room actor

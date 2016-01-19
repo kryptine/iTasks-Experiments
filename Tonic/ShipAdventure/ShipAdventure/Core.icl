@@ -323,8 +323,6 @@ findClosestObject  myLoc (alarmLoc, detector) statusMap inventoryMap exitLocks c
   less c1 c2
   | c1 >=0 && c2 >= 0 = c1<c2
 
-from StdMisc import abort
-
 findClosest :: RoomNumber RoomNumber ObjectType MyRoomStatusMap MyRoomInventoryMap RoomExitLockMap DungeonMap -> Maybe (MyObject, Int, RoomNumber)
 findClosest myLoc targetLoc objectType statusMap inventoryMap exitLocks dungeonMap
   = case smartShipPathToClosestObject objectType myLoc targetLoc statusMap inventoryMap exitLocks dungeonMap of
@@ -334,7 +332,6 @@ findClosest myLoc targetLoc objectType statusMap inventoryMap exitLocks dungeonM
             [x:_] -> Just (obj, cost, fromExit x)
       _ = Nothing
 
-// TODO FIXME Get rid of the newMaps?
-mkRoom :: Room -> Task ()
-mkRoom room = viewInformation "Room Status" [imageView (\(room, _) -> roomImage 'DIS'.newMap 'DIS'.newMap 'DIS'.newMap True (Just room)) (\_ _ -> Nothing)] (room, NoMapClick) @! ()
+mkRoom :: MyMkRoom
+mkRoom = \shStatusMap shRoomActorMap shRoomInventoryMap room -> viewSharedInformation "Room Status" [imageView (\x -> (x, NoMapClick)) (\(((statusMap, actorMap), invMap), _) -> roomImage invMap statusMap actorMap True (Just room)) (\_ _ -> Nothing)] (shStatusMap |+| shRoomActorMap |+| shRoomInventoryMap) @! ()
 

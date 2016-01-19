@@ -50,6 +50,8 @@ import GenLexOrd
 :: RoomActorMap     objType actorStatus :== IntMap [Actor objType actorStatus]
 :: RoomExitLockMap                      :== Map (RoomNumber, Exit) Locked
 
+:: MkRoom r o a :== (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) Room -> Task ()
+
 instance == (Actor o a)
 instance == (Object obj) | == obj
 instance == Exit
@@ -72,13 +74,13 @@ instance toString (Object obj) | toString obj
 
 // place an new actor into a room of your shared map after which the actor can freely move around
 
-addActorToMap :: (Room -> Task ()) (Actor o a) RoomNumber (Shared (RoomStatusMap r))
+addActorToMap :: (MkRoom r o a) (Actor o a) RoomNumber (Shared (RoomStatusMap r))
                  (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
               -> Task () | iTask r & iTask o & iTask a & Eq o
 
 // move around the map until you return something
 
-moveAround :: (Room -> Task ()) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
+moveAround :: (MkRoom r o a) (Actor o a) (Maybe (ActorTask r o a b)) (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) DungeonMap
            -> Task (Maybe b) | iTask r & iTask o & iTask a & Eq o & iTask b
 
 // finds all actors currently walking on the map, find all objects in the map
