@@ -233,8 +233,11 @@ dropObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Sha
            -> Task Bool | iTask o & iTask a & Eq o
 dropObject roomNumber object actor shRoomActorMap shRoomInventoryMap
   =   updateRoomInventory roomNumber (\inv -> [object : inv]) shRoomInventoryMap
-  >>| updateActor roomNumber actor.userName (\actor -> {actor & carrying = removeMember object actor.carrying}) shRoomActorMap
+  >>| updateActor roomNumber actor.userName (\actor -> {actor & carrying = removeObj object actor.carrying}) shRoomActorMap
   >>| return True
+
+removeObj :: !(Object o) ![Object o] -> [Object o]
+removeObj obj objs = [obj` \\ obj` <- objs | obj.objId <> obj`.objId ]
 
 move :: RoomNumber RoomNumber (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
 move fromRoom toRoom actor shRoomActorMap
@@ -253,7 +256,7 @@ move fromRoom toRoom actor shRoomActorMap
 
 useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
 useObject roomNumber object actor shRoomActorMap
-  =   updateActor roomNumber actor.userName (\actor -> {actor & carrying = removeMember object actor.carrying}) shRoomActorMap
+  =   updateActor roomNumber actor.userName (\actor -> {actor & carrying = removeObj object actor.carrying}) shRoomActorMap
   >>| return True
 
 getObjectOfType :: (Actor o a) o -> Object o | iTask o & iTask a
