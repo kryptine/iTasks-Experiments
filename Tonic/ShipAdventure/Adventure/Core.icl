@@ -363,7 +363,7 @@ findActorRoom actor rmap dungeonMap
       []           -> Nothing
       [roomNo : _] -> case findRoom roomNo dungeonMap of
                         Just r -> Just r
-                        _      -> abort "findActorRoom 2" // Nothing
+                        _      -> Nothing
 
 findAllObjects :: (RoomInventoryMap o) -> [(RoomNumber, Object o)] | iTask o
 findAllObjects objectMap = [ (roomNo, object)
