@@ -298,10 +298,7 @@ updateActor roomNumber user actorf shRoomActorMap
 updateRoomInventory :: RoomNumber ([Object o] -> [Object o]) (Shared (RoomInventoryMap o))
                     -> Task () | iTask o
 updateRoomInventory roomNumber updRoom shInvMap
-  = upd ('DIS'.alter alterObjs roomNumber) shInvMap @! ()
-  where
-  alterObjs (Just objs) = Just (updRoom objs)
-  alterObjs _           = Just (updRoom [])
+  = upd ('DIS'.alter (Just o updRoom o fromMaybe []) roomNumber) shInvMap @! ()
 
 // actor status opdating
 
