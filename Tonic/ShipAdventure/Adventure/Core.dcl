@@ -50,7 +50,7 @@ import GenLexOrd
 :: RoomActorMap     objType actorStatus :== IntMap [Actor objType actorStatus]
 :: RoomExitLockMap                      :== Map (RoomNumber, Exit) Locked
 
-:: MkRoom r o a :== (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o)) Room -> Task ()
+:: MkRoom r o a :== (RoomStatusMap r) (RoomActorMap o a) (RoomInventoryMap o) RoomExitLockMap Room -> Task ()
 
 instance == (Actor o a)
 instance == (Object obj) | == obj
@@ -98,7 +98,7 @@ getRoomFromMap 	:: RoomNumber DungeonMap -> Maybe Room
 
 updRoomStatus :: RoomNumber (r -> r) (Shared (RoomStatusMap r)) -> Task () | iTask r
 
-toggleExit :: RoomNumber Exit DungeonMap -> Task ()
+toggleExit :: !RoomNumber !Exit !DungeonMap -> Task ()
 
 // shortest path calculation
 

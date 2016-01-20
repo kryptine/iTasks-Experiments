@@ -183,17 +183,18 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
       (\roomActorMap -> case findActorRoom actor roomActorMap dungeonMap of
                           Just room
                             = whileUnchanged (shStatusMap |+| shRoomInventoryMap |+| exitLockShare)
-                              (\((statusMap, roomInventory), exitLocks) ->
-                              (   roomViz shStatusMap shRoomActorMap shRoomInventoryMap room
-                              >>* (  exitActions room actor exitLocks
-                                  ++ inventoryActions room roomInventory actor
-                                  ++ carryActions room actor
-                                  ) @! Nothing
-                              ) -||-
-                              (case mbtask of
-                                 Nothing -> viewInformation "" [] () @! Nothing
-                                 Just t  -> t actor room statusMap roomActorMap roomInventory dungeonMap
-                              ))
+                                (\((statusMap, roomInventory), exitLocks) ->
+                                  (   roomViz statusMap roomActorMap roomInventory exitLocks room
+                                  >>* (  exitActions room actor exitLocks
+                                      ++ inventoryActions room roomInventory actor
+                                      ++ carryActions room actor
+                                      ) @! Nothing
+                                  ) -||-
+                                  (case mbtask of
+                                     Nothing -> viewInformation "" [] () @! Nothing
+                                     Just t  -> t actor room statusMap roomActorMap roomInventory dungeonMap
+                                  )
+                                )
                           _ = viewInformation "Failed to find actor" [] "Failed to find actor" @! Nothing
       )
   where
@@ -312,7 +313,7 @@ updActorStatus user upd smap
 
 // room status updating
 
-toggleExit :: RoomNumber Exit DungeonMap -> Task ()
+toggleExit :: !RoomNumber !Exit !DungeonMap -> Task ()
 toggleExit roomNo exit dungeonMap
   =             get exitLockShare
   >>= \locks -> set (newLocks locks) exitLockShare @! ()
@@ -362,7 +363,7 @@ findActorRoom actor rmap dungeonMap
       []           -> Nothing
       [roomNo : _] -> case findRoom roomNo dungeonMap of
                         Just r -> Just r
-                        _      -> Nothing
+                        _      -> abort "findActorRoom 2" // Nothing
 
 findAllObjects :: (RoomInventoryMap o) -> [(RoomNumber, Object o)] | iTask o
 findAllObjects objectMap = [ (roomNo, object)
@@ -391,7 +392,7 @@ findRoom roomNo [floor : floors] = case findRoom` floor of
   findRoom`` [] = Nothing
   findRoom`` [room : rooms]
     | room.number == roomNo = Just room
-    | otherwise             = Nothing
+    | otherwise             = findRoom`` rooms
 
 allRooms :: DungeonMap -> [Room]
 allRooms dungeonMap = [room \\ floor <- dungeonMap, layer <- floor, room <- layer]
