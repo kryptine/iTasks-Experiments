@@ -297,11 +297,8 @@ updateActor roomNumber user actorf shRoomActorMap
 // TODO Use shares with room-number focus domain
 updateRoomInventory :: RoomNumber ([Object o] -> [Object o]) (Shared (RoomInventoryMap o))
                     -> Task () | iTask o
-updateRoomInventory roomNumber updRoom smap
-  =              get smap
-  >>= \invMap -> case 'DIS'.get roomNumber invMap of
-                   Just objs -> set ('DIS'.put roomNumber (updRoom objs) invMap) smap @! ()
-                   _         -> return ()
+updateRoomInventory roomNumber updRoom shInvMap
+  = upd ('DIS'.alter (fmap updRoom) roomNumber) shInvMap @! ()
 
 // actor status opdating
 
