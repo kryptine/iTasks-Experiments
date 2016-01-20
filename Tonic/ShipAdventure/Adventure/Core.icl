@@ -182,41 +182,44 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
   = whileUnchanged shRoomActorMap
       (\roomActorMap -> case findActorRoom actor roomActorMap dungeonMap of
                           Just room
-                            = whileUnchanged (shStatusMap |+| shRoomInventoryMap |+| exitLockShare)
-                                (\((statusMap, roomInventory), exitLocks) ->
-                                  (   roomViz statusMap roomActorMap roomInventory exitLocks room
-                                  >>* (  exitActions room actor exitLocks
-                                      ++ inventoryActions room roomInventory actor
-                                      ++ carryActions room actor
-                                      ) @! Nothing
-                                  ) -||-
-                                  (case mbtask of
-                                     Nothing -> viewInformation "" [] () @! Nothing
-                                     Just t  -> t actor room statusMap roomActorMap roomInventory dungeonMap
-                                  )
-                                )
-                          _ = viewInformation "Failed to find actor" [] "Failed to find actor" @! Nothing
+                            = case findActor room.number actor.userName roomActorMap of
+                                Just latestActor
+                                  = whileUnchanged (shStatusMap |+| shRoomInventoryMap |+| exitLockShare)
+                                      (\((statusMap, roomInventory), exitLocks) ->
+                                        (   roomViz statusMap roomActorMap roomInventory exitLocks room
+                                        >>* (  exitActions room latestActor exitLocks
+                                            ++ inventoryActions room roomInventory latestActor
+                                            ++ carryActions room latestActor
+                                            ) @! Nothing
+                                        ) -||-
+                                        (case mbtask of
+                                           Nothing -> viewInformation "" [] () @! Nothing
+                                           Just t  -> t latestActor room statusMap roomActorMap roomInventory dungeonMap
+                                        )
+                                      )
+                                _ = viewInformation "Failed to find actor (2)" [] "Failed to find actor (2)" @! Nothing
+                          _ = viewInformation "Failed to find actor (1)" [] "Failed to find actor (1)" @! Nothing
       )
   where
-  exitActions room nactor exitLocks
-    = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) nactor shRoomActorMap))
+  exitActions room actor exitLocks
+    = [ OnAction (Action ("Go " <+++ exit) []) (always (move room.number (fromExit exit) actor shRoomActorMap))
       \\ exit <- room.exits
       | case 'DM'.get (room.number, exit) exitLocks of
           Just True -> False
           _         -> True
       ]
 
-  inventoryActions room roomInventory nactor
+  inventoryActions room roomInventory actor
     = case 'DIS'.get room.number roomInventory of
         Just objects
-          = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object nactor shRoomActorMap shRoomInventoryMap))
+          = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object actor shRoomActorMap shRoomInventoryMap))
             \\ object <- objects
             ]
         _ = []
 
-  carryActions room nactor
-    = [ OnAction (Action ("Drop " <+++ object) []) (always (dropObject room.number object nactor shRoomActorMap shRoomInventoryMap))
-      \\ object <- nactor.carrying
+  carryActions room actor
+    = [ OnAction (Action ("Drop " <+++ object) []) (always (dropObject room.number object actor shRoomActorMap shRoomInventoryMap))
+      \\ object <- actor.carrying
       ]
 
 pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
@@ -288,8 +291,8 @@ delay = 1
 // room updating
 
 updateActor :: RoomNumber (Actor o a) (Shared (RoomActorMap o a)) -> Task () | iTask o & iTask a
-updateActor roomNumber actor smap
-  = upd ('DIS'.alter (fmap (\actors -> [if (a.userName == actor.userName) actor a \\ a <- actors])) roomNumber) smap @! ()
+updateActor roomNumber actor shRoomActorMap
+  = upd ('DIS'.alter (fmap (\actors -> [if (a.userName == actor.userName) actor a \\ a <- actors])) roomNumber) shRoomActorMap @! ()
 
 // TODO Use shares with room-number focus domain
 updateRoomInventory :: RoomNumber ([Object o] -> [Object o]) (Shared (RoomInventoryMap o))
@@ -370,6 +373,14 @@ findAllObjects objectMap = [ (roomNo, object)
                            \\ (roomNo, objects) <- 'DIS'.toList objectMap
                            , object <- objects
                            ]
+
+findActor :: RoomNumber User (RoomActorMap o a) -> Maybe (Actor o a)
+findActor roomNo usr actorMap = case 'DIS'.get roomNo actorMap of
+                                  Just actors -> case [a \\ a <- actors | a.userName == usr] of
+                                                   [a : _] -> Just a
+                                                   _       -> Nothing
+                                  _           -> Nothing
+
 
 // TODO Make this more efficient
 findUser :: User (RoomActorMap o a) -> Maybe (RoomNumber, Actor o a) | iTask o & iTask a
