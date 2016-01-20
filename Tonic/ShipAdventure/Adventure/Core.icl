@@ -318,18 +318,18 @@ toggleExit roomNo exit dungeonMap
   >>= \locks -> set (newLocks locks) exitLockShare @! ()
   where
   newLocks locks
-    # locked = case 'DM'.get (roomNo, exit) locks of
-                 Just locked = locked
-                 _ = False
-    # inverseExit = case [ (roomNo, exit`) \\ floor <- dungeonMap
-                                            , layer <- floor, room <- layer, exit` <- room.exits
-                         | interestingExit exit room.number exit`] of
-                      [x : _] -> x
-    # locks = 'DM'.put (roomNo, exit) (not locked) locks
-    = 'DM'.put inverseExit (not locked) locks
-
-  interestingExit :: !Exit !RoomNumber !Exit -> Bool
-  interestingExit ie roomNo` e = (roomNo == roomNo` && e == exit) || (roomNo` == fromExit exit && e == ie)
+    # locked    = case 'DM'.get (roomNo, exit) locks of
+                    Just locked -> locked
+                    _           -> False
+    # otherExit = inverseExit exit
+    # otherRoom = case [ room.number
+                       \\ floor <- dungeonMap
+                       , layer <- floor, room <- layer, exit` <- room.exits
+                       | exit` == otherExit && room.number == fromExit exit] of
+                    [x : _] -> x
+    # locks     = 'DM'.put (roomNo, exit) (not locked) locks
+    # locks     = 'DM'.put (otherRoom, otherExit) (not locked) locks
+    = locks
 
   inverseExit :: !Exit -> Exit
   inverseExit (North _) = South roomNo
