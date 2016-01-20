@@ -30,6 +30,9 @@ instance toString ObjectType where
   toString FireExtinguisher = "Extinguiser"
   toString FireBlanket      = "Blanket"
   toString Plug             = "Plug"
+  toString Radar            = "Radar"
+  toString PowerGen         = "Power generator"
+  toString CoolingPump      = "Cooling pump"
 
 instance toString Exit where toString exit = toSingleLineText exit
 

@@ -213,13 +213,13 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
     = case 'DIS'.get room.number roomInventory of
         Just objects
           = [ OnAction (Action ("Fetch " <+++ object.objType) []) (always (pickupObject room.number object actor shRoomActorMap shRoomInventoryMap))
-            \\ object <- objects
+            \\ object <- objects | object.portable
             ]
         _ = []
 
   carryActions room actor
     = [ OnAction (Action ("Drop " <+++ object.objType) []) (always (dropObject room.number object actor shRoomActorMap shRoomInventoryMap))
-      \\ object <- actor.carrying
+      \\ object <- actor.carrying | object.portable
       ]
 
 pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
@@ -298,7 +298,10 @@ updateActor roomNumber user actorf shRoomActorMap
 updateRoomInventory :: RoomNumber ([Object o] -> [Object o]) (Shared (RoomInventoryMap o))
                     -> Task () | iTask o
 updateRoomInventory roomNumber updRoom shInvMap
-  = upd ('DIS'.alter (fmap updRoom) roomNumber) shInvMap @! ()
+  = upd ('DIS'.alter alterObjs roomNumber) shInvMap @! ()
+  where
+  alterObjs (Just objs) = Just (updRoom objs)
+  alterObjs _           = Just (updRoom [])
 
 // actor status opdating
 
