@@ -17,13 +17,14 @@ import GenLexOrd
                   }
 
 :: Object objType =
-  { objId    :: Int
+  { objId    :: ObjectId
   , objType  :: objType
   , reusable :: Bool
   , portable :: Bool
   , quantity :: Int
   }
 
+:: ObjectId   :== Int
 :: Locked     :== Bool
 :: RoomNumber :== Int
 :: Weight     :== Int

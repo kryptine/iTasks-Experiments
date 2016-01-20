@@ -50,8 +50,12 @@ statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
   where
-  invs = [ (4,  [ {Object | objId = 1,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
-         , (7,  [ {Object | objId = 2,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }])
+  invs = [ (4,  [ {Object | objId = 1,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }
+                , {Object | objId = 42, objType = Radar, reusable = True, portable = False, quantity = 1 }
+                ])
+         , (7,  [ {Object | objId = 2,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
+                , {Object | objId = 24, objType = PowerGen, reusable = True, portable = False, quantity = 1 }
+                ])
          , (8,  [ {Object | objId = 3,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
          , (9,  [ {Object | objId = 4,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }])
          , (10, [ {Object | objId = 5,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
@@ -62,6 +66,36 @@ myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
                 , {Object | objId = 10, objType = Plug, reusable = False, portable = True, quantity = 1 }])
          , (20, [ {Object | objId = 11, objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
          ]
+
+myNetwork :: Network
+myNetwork =
+  { Network
+  | cables = 'DIS'.fromList [ (3, [{cableId = 1, description = "Power cable", fromRoom = 5, toRoom = 1, operational = True}])
+                            ]
+  , devices = 'DIS'.fromList [ (1, 'DIS'.fromList [(1, 42)]) // Radar
+                             , (5, 'DIS'.fromList [(1, 24)]) // Power
+                             ]
+  }
+
+devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
+devicesForCable invMap {cableId} {devices}
+  # objIds = [objectId \\ (_, cableObjects) <- 'DIS'.toList devices, (cableId`, objectId) <- 'DIS'.toList cableObjects | cableId == cableId`]
+  = [ obj \\ obj <- flatten ('DIS'.elems invMap) | isMember obj.objId objIds]
+
+cablesForRoom :: RoomNumber Network -> [Cable]
+cablesForRoom roomNo {cables} = case 'DIS'.get roomNo cables of
+                                  Just cables -> cables
+                                  _           -> []
+
+cutCable :: RoomNumber CableId Network -> Network
+cutCable roomNo cableId network = { network & cables = 'DIS'.alter (fmap (findAndCutCable cableId)) roomNo network.cables }
+  where
+  findAndCutCable cableId cables = [if (cable.cableId == cableId) {cable & operational = False} cable \\ cable <- cables]
+
+patchCable :: RoomNumber CableId Network -> Network
+patchCable roomNo cableId network = { network & cables = 'DIS'.alter (fmap (findAndCutCable cableId)) roomNo network.cables }
+  where
+  findAndCutCable cableId cables = [if (cable.cableId == cableId) {cable & operational = True} cable \\ cable <- cables]
 
 inventoryInRoomShare :: RWShared RoomNumber [MyObject] [MyObject]
 inventoryInRoomShare = intMapLens "inventoryInRoomShare" myInventoryMap (Just [])
@@ -181,8 +215,6 @@ myMap = [floor0, floor1]
   room18    = {name = "room 1.8",   number = 20, exits = [North 18, Up 10]}
 
 // making an image from the map ...
-
-
 mapImage :: !Bool !DungeonMap !(!(!(!(!RoomExitLockMap, !MyRoomInventoryMap), !MyRoomStatusMap), !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
 mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
   #! (floors, tsrc) = mapSt (floorImage exitLocks inventoryMap statusMap actorMap mngmnt) (zip2 m (reverse [0..length m])) tsrc

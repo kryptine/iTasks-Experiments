@@ -35,12 +35,18 @@ import Adventure.Core
 
 :: CableId :== Int
 
-// cableId and inRoom together form pri-key for Cable
-:: Cable =
-  { cableId    :: CableId
-  , inRoom     :: RoomNumber
-  , connectsTo :: CableConnection
+:: Cable = // Edge
+  { cableId     :: CableId
+  , description :: String
+  , fromRoom    :: RoomNumber
+  , toRoom      :: RoomNumber
+  , operational :: Bool
   }
+
+:: Network
+  = { cables  :: IntMap [Cable] // [RoomNumber |-> Cables]
+    , devices :: IntMap (IntMap ObjectId) // [RoomNumber |-> [CableId |-> ObjectId]]
+    }
 
 :: CableConnection
   = RoomConn RoomNumber
@@ -89,3 +95,12 @@ setRoomDetectors 	:: Task ()
 
 roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
 
+myNetwork :: Network
+
+devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
+
+cablesForRoom :: RoomNumber Network -> [Cable]
+
+cutCable :: RoomNumber CableId Network -> Network
+
+patchCable :: RoomNumber CableId Network -> Network
