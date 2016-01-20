@@ -42,7 +42,9 @@ changeScript prompt script
 interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
 interperScript (targetRoom,detector) user script
   =                get myActorMap
-  >>= \actorMap -> perform script (fromJust (findUser user actorMap))
+  >>= \actorMap -> case findUser user actorMap of
+                     Just user -> perform script user
+                     _         -> return False
   where
   perform :: [Script] (RoomNumber,MyActor) -> Task Bool
   perform [] (actorLoc, actor) = return True

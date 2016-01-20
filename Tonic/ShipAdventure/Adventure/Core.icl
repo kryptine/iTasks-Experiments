@@ -212,13 +212,13 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
   inventoryActions room roomInventory actor
     = case 'DIS'.get room.number roomInventory of
         Just objects
-          = [ OnAction (Action ("Fetch " <+++ object) []) (always (pickupObject room.number object actor shRoomActorMap shRoomInventoryMap))
+          = [ OnAction (Action ("Fetch " <+++ object.objType) []) (always (pickupObject room.number object actor shRoomActorMap shRoomInventoryMap))
             \\ object <- objects
             ]
         _ = []
 
   carryActions room actor
-    = [ OnAction (Action ("Drop " <+++ object) []) (always (dropObject room.number object actor shRoomActorMap shRoomInventoryMap))
+    = [ OnAction (Action ("Drop " <+++ object.objType) []) (always (dropObject room.number object actor shRoomActorMap shRoomInventoryMap))
       \\ object <- actor.carrying
       ]
 
@@ -226,14 +226,14 @@ pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (S
              -> Task Bool | iTask o & iTask a & Eq o
 pickupObject roomNumber object actor shRoomActorMap shRoomInventoryMap
   =   updateRoomInventory roomNumber (\inv -> [obj \\ obj <- inv | obj.objId <> object.objId]) shRoomInventoryMap
-  >>| updateActor roomNumber {actor & carrying = [object:actor.carrying]} shRoomActorMap
+  >>| updateActor roomNumber actor.userName (\actor -> {actor & carrying = [object:actor.carrying]}) shRoomActorMap
   >>| return True
 
 dropObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
            -> Task Bool | iTask o & iTask a & Eq o
 dropObject roomNumber object actor shRoomActorMap shRoomInventoryMap
   =   updateRoomInventory roomNumber (\inv -> [object : inv]) shRoomInventoryMap
-  >>| updateActor roomNumber {actor & carrying = removeMember object actor.carrying} shRoomActorMap
+  >>| updateActor roomNumber actor.userName (\actor -> {actor & carrying = removeMember object actor.carrying}) shRoomActorMap
   >>| return True
 
 move :: RoomNumber RoomNumber (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
@@ -253,7 +253,7 @@ move fromRoom toRoom actor shRoomActorMap
 
 useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
 useObject roomNumber object actor shRoomActorMap
-  =   updateActor roomNumber {actor & carrying = removeMember object actor.carrying} shRoomActorMap
+  =   updateActor roomNumber actor.userName (\actor -> {actor & carrying = removeMember object actor.carrying}) shRoomActorMap
   >>| return True
 
 getObjectOfType :: (Actor o a) o -> Object o | iTask o & iTask a
@@ -290,9 +290,9 @@ delay = 1
 
 // room updating
 
-updateActor :: RoomNumber (Actor o a) (Shared (RoomActorMap o a)) -> Task () | iTask o & iTask a
-updateActor roomNumber actor shRoomActorMap
-  = upd ('DIS'.alter (fmap (\actors -> [if (a.userName == actor.userName) actor a \\ a <- actors])) roomNumber) shRoomActorMap @! ()
+updateActor :: RoomNumber User ((Actor o a) -> Actor o a) (Shared (RoomActorMap o a)) -> Task () | iTask o & iTask a
+updateActor roomNumber user actorf shRoomActorMap
+  = upd ('DIS'.alter (fmap (\actors -> [if (a.userName == user) (actorf a) a \\ a <- actors])) roomNumber) shRoomActorMap @! ()
 
 // TODO Use shares with room-number focus domain
 updateRoomInventory :: RoomNumber ([Object o] -> [Object o]) (Shared (RoomInventoryMap o))
@@ -310,7 +310,7 @@ updActorStatus user upd smap
   =             get smap
   >>= \smap` -> case findUser user smap` of
                   Nothing                  -> return ()
-                  Just (roomnumber, actor) -> updateActor roomnumber actor smap
+                  Just (roomnumber, actor) -> updateActor roomnumber actor.userName updStatus smap
   where
   updStatus actor = {actor & actorStatus = upd actor.actorStatus}
 

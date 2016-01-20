@@ -145,13 +145,16 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
                      -> Task ()
   handleWhileWalking actor title priority task
     =           (((actor.userName, title) @: (              moveAround mkRoom actor (Just task) myStatusMap myActorMap myInventoryMap myMap
-                                             >>= \mbTask -> fromJust mbTask))
+                                             >>= \mbTask -> case mbTask of
+                                                              Just t -> t
+                                                              _      -> viewInformation "Error" [] "handleWhileWalking (1)" @! Nothing
+                                             ))
 
                 -||-
                 (viewInformation ("Cancel task \"" <+++ title <+++ "\"") [] () @! Nothing))
-    >>= \mba -> if (isNothing mba)
-                  (viewInformation ("Task " <+++ title <+++ " has been cancelled by you") [] ())
-                  (viewInformation ("Task " <+++ title <+++ " terminated normally, returning:") [] (fromJust mba) @! ())
+    >>= \mba -> case mba of
+                  Just ba -> viewInformation ("Task " <+++ title <+++ " terminated normally, returning:") [] ba @! ()
+                  _ -> viewInformation ("Task " <+++ title <+++ " has been cancelled by you") [] ()
     >>|         return ()
 
   taskToDo :: (RoomNumber,Detector) MyActor Room MyRoomStatusMap MyRoomActorMap MyRoomInventoryMap DungeonMap -> Task (Maybe (Task (Maybe String)))
@@ -263,14 +266,16 @@ startSimulation commander user (alarmLoc, detector)
   >>= \statusMap -> get myActorMap
   >>= \mam       -> get exitLockShare
   >>= \exitLocks -> get myInventoryMap
-  >>= \invMap    -> let (myLoc, curActor) = fromJust (findUser user mam)
-                    in  case findClosestObject myLoc (alarmLoc, detector) statusMap invMap exitLocks myMap of
-                          (Nothing, _) = endSimulation False
-                          (Just loc, mbObj) = (case mbObj of
-                                                 Nothing  = simulateHandling myLoc alarmLoc detector curActor myStatusMap myMap
-                                                 Just obj = simulateHandlingWithObject myLoc obj loc alarmLoc detector curActor myStatusMap myInventoryMap myMap
-                                              )
-                                              >>| endSimulation True
+  >>= \invMap    -> case findUser user mam of
+                      Just (myLoc, curActor)
+                        = case findClosestObject myLoc (alarmLoc, detector) statusMap invMap exitLocks myMap of
+                            (Nothing, _) = endSimulation False
+                            (Just loc, mbObj) = (case mbObj of
+                                                   Nothing  = simulateHandling myLoc alarmLoc detector curActor myStatusMap myMap
+                                                   Just obj = simulateHandlingWithObject myLoc obj loc alarmLoc detector curActor myStatusMap myInventoryMap myMap
+                                                )
+                                                >>| endSimulation True
+                      _ = endSimulation False
   where
   endSimulation ok
     =   updStatusOfActor user Available
