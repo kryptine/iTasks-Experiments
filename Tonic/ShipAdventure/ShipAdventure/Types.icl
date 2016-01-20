@@ -238,7 +238,7 @@ roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number
   #! roomStatus     = case 'DIS'.get number statusMap of
                         Just roomStatus = roomStatus
                         _
-                        | mngmnt    = [FireDetector False, SmokeDetector False, FloodDetector False]
+                        | mngmnt    = [FireDetector False, SmokeDetector False, FloodDetector False] // TODO This isnt really correct yet. When we get Just, other buttons will disappear. We need to fill the shares to make this all work.
                         | otherwise = []
   #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
   #! actors         = case 'DIS'.get number actorMap of
