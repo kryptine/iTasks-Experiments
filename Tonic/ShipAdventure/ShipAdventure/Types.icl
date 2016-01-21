@@ -19,7 +19,7 @@ import ShipAdventure.PathFinding
 
 
 derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, CableConnection, Priority, MapClick, Network
+derive class iTask Cable, Priority, MapClick, Network
 
 // std overloading instances
 
@@ -76,6 +76,11 @@ myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
          , (20, [ {Object | objId = 11, objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
          ]
 
+cableCapacity :: Cable -> Capacity
+cableCapacity cable
+  | cable.operational = cable.capacity
+  | otherwise         = 0
+
 manageDevices :: Task ()
 manageDevices
   =               get myNetwork
@@ -119,8 +124,8 @@ manageDevices
 myNetwork :: RWShared () Network Network
 myNetwork = sharedStore "myNetwork"
   { Network
-  | cables = 'DIS'.fromList [ (3, [{cableId = 1, description = "Radar power cable", fromRoom = 5, toRoom = 1, operational = True}])
-                            , (7, [{cableId = 2, description = "Gun power cable", fromRoom = 5, toRoom = 9, operational = True}])
+  | cables = 'DIS'.fromList [ (3, [{cableId = 1, description = "Radar power cable", fromRoom = 5, toRoom = 1, operational = True, capacity = 1}])
+                            , (7, [{cableId = 2, description = "Gun power cable", fromRoom = 5, toRoom = 9, operational = True, capacity = 1}])
                             ]
   , devices = 'DIS'.fromList [ (1, 'DIS'.fromList [(1, 42)]) // Radar
                              , (5, 'DIS'.fromList [(1, 24), (2, 24)]) // Power

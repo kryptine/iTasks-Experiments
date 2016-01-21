@@ -42,6 +42,7 @@ import Adventure.Core
   , fromRoom    :: RoomNumber
   , toRoom      :: RoomNumber
   , operational :: Bool
+  , capacity    :: Capacity
   }
 
 :: Network
@@ -49,12 +50,28 @@ import Adventure.Core
     , devices :: IntMap (IntMap ObjectId) // [RoomNumber |-> [CableId |-> ObjectId]]
     }
 
-:: CableConnection
-  = RoomConn RoomNumber
-  | DeviceConn Int
+:: Capacity :== Int
+//:: Cable = // Edge
+  //{ cableId     :: CableId
+  //, description :: String
+  //, operational :: Bool
+  //, capacity    :: Capacity
+  //, cableType   :: CableType
+  //}
+:: CableType = PowerCable | CoolingPipe | DataCable
+:: Device =
+  { objectId        :: ObjectId
+  , connectedCables :: [CableId]
+  , requirements    :: [(CableType, Int)]
+  }
+//:: Network
+  //= { cables  :: IntMap [RoomNumber] // [CableId |-> RoomNumbers]
+    //, devices :: IntMap [Device] // [RoomNumber |-> Devices]
+    //}
+cableCapacity :: Cable -> Capacity
 
 derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, CableConnection, Priority, MapClick, Network
+derive class iTask Cable, Priority, MapClick, Network
 
 instance 	== 			ObjectType
 instance	== 			Priority   
