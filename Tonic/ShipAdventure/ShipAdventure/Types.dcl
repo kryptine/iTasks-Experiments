@@ -27,6 +27,7 @@ import Adventure.Core
 				| 	Radar
 				| 	PowerGen
 				| 	CoolingPump
+				| 	Gun
 
 :: ActorStatus	= 	{ occupied	:: Availability
 					}
@@ -53,7 +54,7 @@ import Adventure.Core
   | DeviceConn Int
 
 derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, CableConnection, Priority, MapClick
+derive class iTask Cable, CableConnection, Priority, MapClick, Network
 
 instance 	== 			ObjectType
 instance	== 			Priority   
@@ -95,12 +96,11 @@ setRoomDetectors 	:: Task ()
 
 roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
 
-myNetwork :: Network
 
 devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
-
 cablesForRoom :: RoomNumber Network -> [Cable]
 
 cutCable :: RoomNumber CableId Network -> Network
 
 patchCable :: RoomNumber CableId Network -> Network
+manageDevices :: Task ()
