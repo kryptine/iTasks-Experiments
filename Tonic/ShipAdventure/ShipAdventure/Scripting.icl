@@ -60,7 +60,7 @@ interperScript (targetRoom,detector) user script
     =              get myInventoryMap
     >>= \invMap -> case 'DIS'.get actorLoc invMap of
                      Just inv
-                       = case [obj \\ obj=:{Object | objType } <- inv | objType` == objType] of
+                       = case [obj \\ obj=:{Object | objType } <- 'DIS'.elems inv | objType` == objType] of
                            [obj : _] =   pickupObject actorLoc obj actor myActorMap myInventoryMap
                                      >>| perform next (actorLoc,actor)
                            _ = perform next (actorLoc, actor)
@@ -84,8 +84,8 @@ interperScript (targetRoom,detector) user script
     =              get myInventoryMap
     >>= \invMap -> case 'DIS'.get actorLoc invMap of
                      Just inv
-                       | isTrue inv condition myMap (actorLoc,actor) = perform (script1 ++ next) (actorLoc, actor)
-                       | otherwise                                   = perform (script2 ++ next) (actorLoc, actor)
+                       | isTrue ('DIS'.elems inv) condition myMap (actorLoc,actor) = perform (script1 ++ next) (actorLoc, actor)
+                       | otherwise                                                 = perform (script2 ++ next) (actorLoc, actor)
 
   isTrue inv (ObjectInCurrentRoom object) map (actorLoc,actor)
     = objTypeInList object inv

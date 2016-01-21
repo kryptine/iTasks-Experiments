@@ -39,47 +39,37 @@ import Adventure.Core
 :: Cable = // Edge
   { cableId     :: CableId
   , description :: String
-  , fromRoom    :: RoomNumber
-  , toRoom      :: RoomNumber
-  , operational :: Bool
   , capacity    :: Capacity
+  , cableType   :: CableType
   }
 
-:: Network
-  = { cables  :: IntMap [Cable] // [RoomNumber |-> Cables]
-    , devices :: IntMap (IntMap ObjectId) // [RoomNumber |-> [CableId |-> ObjectId]]
-    }
+:: Operational :== Bool
+
+:: Network =
+  { cables       :: IntMap Cable        // [CableId |-> Cable]
+  , cableMapping :: IntMap [(Operational, RoomNumber)] // [CableId |-> RoomNumbers]
+  , devices      :: IntMap [Device]     // [RoomNumber |-> Devices]
+  }
 
 :: Capacity :== Int
-//:: Cable = // Edge
-  //{ cableId     :: CableId
-  //, description :: String
-  //, operational :: Bool
-  //, capacity    :: Capacity
-  //, cableType   :: CableType
-  //}
 :: CableType = PowerCable | CoolingPipe | DataCable
 :: Device =
   { objectId        :: ObjectId
   , connectedCables :: [CableId]
-  , requirements    :: [(CableType, Int)]
+  , requires        :: [(CableType, Int)]
+  , produces        :: [(CableType, Int)]
   }
-//:: Network
-  //= { cables  :: IntMap [RoomNumber] // [CableId |-> RoomNumbers]
-    //, devices :: IntMap [Device] // [RoomNumber |-> Devices]
-    //}
-cableCapacity :: Cable -> Capacity
 
 derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, Priority, MapClick, Network
+derive class iTask Cable, Priority, MapClick, Network, Device, CableType
 
-instance 	== 			ObjectType
-instance	== 			Priority   
+instance ==       ObjectType
+instance ==       Priority
 
-instance	toString 	ObjectType
-instance 	toString 	Exit 
-instance 	toString 	Detector
-	
+instance toString ObjectType
+instance toString Exit
+instance toString Detector
+
 // shared stores:
 
 myMap          :: DungeonMap // map of the ship
@@ -88,7 +78,7 @@ myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myActorMap     :: RWShared () MyRoomActorMap     MyRoomActorMap
 
 statusInRoomShare    :: RWShared RoomNumber RoomStatus RoomStatus
-inventoryInRoomShare :: RWShared RoomNumber [MyObject] [MyObject]
+inventoryInRoomShare :: RWShared RoomNumber (IntMap MyObject) (IntMap MyObject)
 actorsInRoomShare    :: RWShared RoomNumber [MyActor] [MyActor]
 
 allActiveAlarms    :: ReadOnlyShared [(RoomNumber, Detector)]
@@ -115,7 +105,6 @@ roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorM
 
 
 devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
-cablesForRoom :: RoomNumber Network -> [Cable]
 
 cutCable :: RoomNumber CableId Network -> Network
 

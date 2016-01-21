@@ -19,7 +19,7 @@ import ShipAdventure.PathFinding
 
 
 derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, Priority, MapClick, Network
+derive class iTask Cable, Priority, MapClick, Network, Device, CableType
 
 // std overloading instances
 
@@ -54,110 +54,149 @@ statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
   where
-  invs = [ (1,  [{Object | objId = 42, objType = Radar, reusable = True, portable = False, quantity = 1 }
-                ])
-         , (4,  [ {Object | objId = 1,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }
-                ])
-         , (5,  [{Object | objId = 24, objType = PowerGen, reusable = True, portable = False, quantity = 1 }
-                ])
-         , (7,  [ {Object | objId = 2,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
-                ])
-         , (8,  [ {Object | objId = 3,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
-         , (9,  [ {Object | objId = 4,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
-                , {Object | objId = 64, objType = Gun, reusable = True, portable = False, quantity = 1 }
-                ])
-         , (10, [ {Object | objId = 5,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
-         , (14, [ {Object | objId = 6,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
-         , (17, [ {Object | objId = 7,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
-                , {Object | objId = 8,  objType = Plug, reusable = False, portable = True, quantity = 1 }])
-         , (19, [ {Object | objId = 9,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 }
-                , {Object | objId = 10, objType = Plug, reusable = False, portable = True, quantity = 1 }
-                ])
-         , (20, [ {Object | objId = 11, objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 }])
+  invs = [ (1,  'DIS'.fromList [ (42, {Object | objId = 42, objType = Radar, reusable = True, portable = False, quantity = 1 })
+                               ])
+         , (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })
+                               ])
+         , (5,  'DIS'.fromList [ (24, {Object | objId = 24, objType = PowerGen, reusable = True, portable = False, quantity = 1 })
+                               ])
+         , (7,  'DIS'.fromList [ (2,  {Object | objId = 2,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 })
+                               ])
+         , (8,  'DIS'.fromList [ (3,  {Object | objId = 3,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
+         , (9,  'DIS'.fromList [ (4,  {Object | objId = 4,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 } )
+                               , (64, {Object | objId = 64, objType = Gun, reusable = True, portable = False, quantity = 1 })
+                               ])
+         , (10, 'DIS'.fromList [ (5,  {Object | objId = 5,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
+         , (14, 'DIS'.fromList [ (6,  {Object | objId = 6,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
+         , (17, 'DIS'.fromList [ (7,  {Object | objId = 7,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 })
+                               , (8,  {Object | objId = 8,  objType = Plug, reusable = False, portable = True, quantity = 1 })
+                               ])
+         , (19, 'DIS'.fromList [ (9,  {Object | objId = 9,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 })
+                               , (10, {Object | objId = 10, objType = Plug, reusable = False, portable = True, quantity = 1 })
+                               ])
+         , (20, 'DIS'.fromList [ (11, {Object | objId = 11, objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
          ]
-
-cableCapacity :: Cable -> Capacity
-cableCapacity cable
-  | cable.operational = cable.capacity
-  | otherwise         = 0
 
 manageDevices :: Task ()
 manageDevices
   =               get myNetwork
   >>= \network -> (viewSharedInformation "Device network" [ViewWith ppNetwork] (myNetwork |+| myInventoryMap)
                   -&&-
-                  viewSharedInformation "Broken devices" [ViewWith (allCutCables network)] myInventoryMap
+                  viewSharedInformation "Disabled devices" [ViewWith disabledDevices] (myNetwork |+| myInventoryMap)
                   ) @! ()
-  >>* ([OnAction (Action ("Cut " +++ mkCableDesc roomNo cable) []) (always (cutCableTask roomNo cable)) \\ (roomNo, cables) <- 'DIS'.toList network.cables, cable <- cables | cable.operational]
+  >>* ([  OnAction (Action ("Cut " +++ mkCableDesc roomNo cable) []) (always (cutCableTask roomNo cable))
+       \\ cable  <- 'DIS'.elems network.cables
+       ,  (True, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
+       ]
        ++
-       [OnAction (Action ("Patch " +++ mkCableDesc roomNo cable) []) (always (patchCableTask roomNo cable)) \\ (roomNo, cables) <- 'DIS'.toList network.cables, cable <- cables | not cable.operational]
+       [  OnAction (Action ("Patch " +++ mkCableDesc roomNo cable) []) (always (patchCableTask roomNo cable))
+       \\ cable  <- 'DIS'.elems network.cables
+       ,  (False, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
+       ]
        )
   where
   ppNetwork (network, invMap) = (cablesView, devicesView)
     where
-    cablesView = ( "Cables"
-                 , [  ("Room " +++ toString roomNo, cables)
-                   \\ (roomNo, cables) <- 'DIS'.toList network.cables
-                   ]
-                 )
+    cablesView = ("Cables", network.cables)
     devicesView = ( "Devices"
-                  , [  ("Room " +++ toString roomNo, ppObjs roomNo objsCables)
-                    \\ (roomNo, objsCables) <- 'DIS'.toList network.devices
+                  , [  ("Room " +++ toString roomNo, devices`)
+                    \\ (roomNo, devices`) <- 'DIS'.toList network.devices
                     ]
                   )
-    ppObjs roomNo objsCables
-      = [("Cable " +++ toString cableId, "Object: " +++ ppObj objId) \\ (cableId, objId) <- 'DIS'.toList objsCables]
-      where
-      ppObj objId = case 'DIS'.get roomNo invMap of
-                      Just objs -> case [obj \\ obj <- objs | obj.objId == objId] of
-                                     [obj : _] -> toString obj.objType
-                                     _         -> "(no object 2)"
-                      _         -> "(no object 1)"
-  allCutCables network invMap = [devicesForCable invMap cable network \\ (roomNo, cables) <- 'DIS'.toList network.cables, cable <- cables | not cable.operational]
-  mkCableDesc roomNo {Cable | description, fromRoom, toRoom}
-    = "'" +++ description +++ "' in " +++ toString roomNo +++ " from " +++ toString fromRoom +++ " to " +++ toString toRoom
+  disabledDevices (network, invMap) = [  devicesForCable invMap cable network
+                                      \\ cable <- 'DIS'.elems network.cables
+                                      | not (isOperational cable.cableId network.cableMapping)
+                                      ]
+  mkCableDesc roomNo {Cable | cableId, description}
+    = "'" +++ description +++ " " +++ toString cableId +++ "' in room " +++ toString roomNo
   cutCableTask roomNo cable
     = upd (cutCable roomNo cable.cableId) myNetwork >>| manageDevices
   patchCableTask roomNo cable
     = upd (patchCable roomNo cable.cableId) myNetwork >>| manageDevices
 
+isOperational cableId cableMapping = and [b \\ (b, _) <- fromMaybe [] ('DIS'.get cableId cableMapping)]
+
 myNetwork :: RWShared () Network Network
 myNetwork = sharedStore "myNetwork"
   { Network
-  | cables = 'DIS'.fromList [ (3, [{cableId = 1, description = "Radar power cable", fromRoom = 5, toRoom = 1, operational = True, capacity = 1}])
-                            , (7, [{cableId = 2, description = "Gun power cable", fromRoom = 5, toRoom = 9, operational = True, capacity = 1}])
+  | cables = 'DIS'.fromList [ (1, { Cable
+                                  | cableId     = 1
+                                  , description = "Radar power cable"
+                                  , capacity    = 1
+                                  , cableType   = PowerCable
+                                  })
+                            , (2, { Cable
+                                  | cableId     = 2
+                                  , description = "Gun power cable"
+                                  , capacity    = 1
+                                  , cableType   = PowerCable
+                                  })
                             ]
-  , devices = 'DIS'.fromList [ (1, 'DIS'.fromList [(1, 42)]) // Radar
-                             , (5, 'DIS'.fromList [(1, 24), (2, 24)]) // Power
-                             , (9, 'DIS'.fromList [(2, 64)]) // Gun
+  , cableMapping = 'DIS'.fromList [ (1, [ (True, 1)
+                                        , (True, 3)
+                                        , (True, 5)
+                                        ])
+                                  , (2, [ (True, 5)
+                                        , (True, 7)
+                                        , (True, 9)
+                                        ])
+                                  ]
+  , devices = 'DIS'.fromList [ (1, [{ Device // Radar
+                                    | objectId        = 42
+                                    , connectedCables = [1]
+                                    , requires        = [(PowerCable, 1)]
+                                    , produces        = []
+                                    }
+                                   ])
+                             , (5, [{ Device // Power gen
+                                    | objectId = 24
+                                    , connectedCables = [1, 2]
+                                    , requires = [] // TODO Cooling
+                                    , produces = [(PowerCable, 10)]
+                                    }
+                                   ])
+                             , (9, [{ Device // Gun
+                                    | objectId        = 64
+                                    , connectedCables = [2]
+                                    , requires        = [(PowerCable, 1)]
+                                    , produces        = []
+                                    }
+                                   ])
                              ]
   }
 
 devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
-devicesForCable invMap {cableId, toRoom} {devices}
-  # objIds = [(inRoom, objectId) \\ (inRoom, cableObjects) <- 'DIS'.toList devices, (cableId`, objectId) <- 'DIS'.toList cableObjects | cableId == cableId`]
-  = [ obj \\ obj <- flatten ('DIS'.elems invMap) | isRelevantObj objIds obj.objId toRoom]
+devicesForCable invMap {cableId, cableType} {cableMapping, devices}
+  = flatten [  case 'DIS'.get roomNo invMap of
+                 Just objMap -> case 'DIS'.get device.objectId objMap of
+                                  Just obj -> [obj]
+                                  _        -> []
+                 _           -> []
+            \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
+            ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
+            |  requiresCable cableType device
+            ]
   where
-  isRelevantObj objIds objId toRoom
-    = not (isEmpty [0 \\ (inRoom, objId`) <- objIds | objId == objId` && inRoom == toRoom])
+  // TODO Take quantity into account
+  requiresCable cableType device = not (isEmpty [0 \\ (cableType`, _) <- device.requires
+                                                | cableType === cableType`])
 
-cablesForRoom :: RoomNumber Network -> [Cable]
-cablesForRoom roomNo {cables} = case 'DIS'.get roomNo cables of
-                                  Just cables -> cables
-                                  _           -> []
+
+// devicesForCable invMap {cableId, toRoom} {devices}
+//   # objIds = [(inRoom, objectId) \\ (inRoom, cableObjects) <- 'DIS'.toList devices, (cableId`, objectId) <- 'DIS'.toL
+//   = [ obj \\ obj <- flatten ('DIS'.elems invMap) | isRelevantObj objIds obj.objId toRoom]
+//   where
+//   isRelevantObj objIds objId toRoom
+//     = not (isEmpty [0 \\ (inRoom, objId`) <- objIds | objId == objId` && inRoom == toRoom])
 
 cutCable :: RoomNumber CableId Network -> Network
-cutCable roomNo cableId network = { network & cables = 'DIS'.alter (fmap (findAndCutCable cableId)) roomNo network.cables }
-  where
-  findAndCutCable cableId cables = [if (cable.cableId == cableId) {cable & operational = False} cable \\ cable <- cables]
+cutCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) False op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
 
 patchCable :: RoomNumber CableId Network -> Network
-patchCable roomNo cableId network = { network & cables = 'DIS'.alter (fmap (findAndCutCable cableId)) roomNo network.cables }
-  where
-  findAndCutCable cableId cables = [if (cable.cableId == cableId) {cable & operational = True} cable \\ cable <- cables]
+patchCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) True op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
 
-inventoryInRoomShare :: RWShared RoomNumber [MyObject] [MyObject]
-inventoryInRoomShare = intMapLens "inventoryInRoomShare" myInventoryMap (Just [])
+inventoryInRoomShare :: RWShared RoomNumber (IntMap MyObject) (IntMap MyObject)
+inventoryInRoomShare = intMapLens "inventoryInRoomShare" myInventoryMap (Just 'DIS'.newMap)
 
 myActorMap :: RWShared () MyRoomActorMap MyRoomActorMap
 myActorMap = sharedStore "myActorMap" 'DIS'.newMap
@@ -338,7 +377,7 @@ roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number
                         _           -> []
   #! actorBadges    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
   #! inventory      = case 'DIS'.get number inventoryMap of
-                        Just inv -> inv
+                        Just inv -> 'DIS'.elems inv
                         _        -> []
   #! numInv         = length inventory
   #! inventoryBadge = if (numInv > 0)

@@ -46,9 +46,9 @@ import GenLexOrd
 // return True to stop the task
 :: ActorTask r o a b :== (Actor o a) Room (RoomStatusMap r) (RoomActorMap o a) (RoomInventoryMap o) DungeonMap -> Task (Maybe b)
 
-:: RoomStatusMap    roomStatus          :== IntMap roomStatus
-:: RoomInventoryMap objType             :== IntMap [Object objType]
-:: RoomActorMap     objType actorStatus :== IntMap [Actor objType actorStatus]
+:: RoomStatusMap    roomStatus          :== IntMap roomStatus // [RoomNumber |-> roomStatus]
+:: RoomInventoryMap objType             :== IntMap (IntMap (Object objType)) // [RoomNumber |-> [ObjId |-> Object]]
+:: RoomActorMap     objType actorStatus :== IntMap [Actor objType actorStatus] // [RoomNumber |-> Actors]
 :: RoomExitLockMap                      :== Map (RoomNumber, Exit) Locked
 
 :: MkRoom r o a :== (RoomStatusMap r) (RoomActorMap o a) (RoomInventoryMap o) RoomExitLockMap Room -> Task ()
