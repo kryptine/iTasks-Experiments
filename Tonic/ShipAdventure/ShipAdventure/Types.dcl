@@ -1,6 +1,7 @@
 definition module ShipAdventure.Types
  
 import Adventure.Core
+import GenLexOrd
 
 :: MyActor  :== Actor ObjectType ActorStatus
 :: MyObject :== Object ObjectType
@@ -52,19 +53,24 @@ import Adventure.Core
   }
 
 :: Capacity :== Int
+
 :: CableType = PowerCable | CoolingPipe | DataCable
 :: Device =
   { objectId        :: ObjectId
   , connectedCables :: [CableId]
-  , requires        :: [(CableType, Int)]
-  , produces        :: [(CableType, Int)]
+  , requires        :: Map CableType Capacity
+  , produces        :: Map CableType Capacity
   }
 
+derive gLexOrd CableType
 derive class iTask Detector, ObjectType, ActorStatus, Availability
 derive class iTask Cable, Priority, MapClick, Network, Device, CableType
 
 instance ==       ObjectType
 instance ==       Priority
+
+instance <  CableType
+instance == CableType
 
 instance toString ObjectType
 instance toString Exit

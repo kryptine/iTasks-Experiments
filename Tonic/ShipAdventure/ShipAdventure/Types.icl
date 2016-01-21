@@ -17,7 +17,7 @@ import Adventure.Core
 from Adventure.Logging import addLog
 import ShipAdventure.PathFinding
 
-
+derive gLexOrd CableType
 derive class iTask Detector, ObjectType, ActorStatus, Availability
 derive class iTask Cable, Priority, MapClick, Network, Device, CableType
 
@@ -41,6 +41,14 @@ instance toString Detector
 where toString (FireDetector _)  = "Fire Alarm"
 	  toString (SmokeDetector _) = "Smoke Alarm"
 	  toString (FloodDetector _) = "Flood Alarm"
+
+instance < CableType where
+  (<) l r = case l =?= r of
+              LT -> True
+              _  -> False
+
+instance == CableType where
+  (==) l r = l === r
 
 // shared stores:
 
@@ -144,29 +152,29 @@ myNetwork = sharedStore "myNetwork"
   , devices = 'DIS'.fromList [ (1, [{ Device // Radar
                                     | objectId        = 42
                                     , connectedCables = [1]
-                                    , requires        = [(PowerCable, 1)]
-                                    , produces        = []
+                                    , requires        = 'DM'.fromList [(PowerCable, 1)]
+                                    , produces        = 'DM'.fromList []
                                     }
                                    ])
                              , (5, [{ Device // Power gen
-                                    | objectId = 24
+                                    | objectId        = 24
                                     , connectedCables = [1, 2]
-                                    , requires = [] // TODO Cooling
-                                    , produces = [(PowerCable, 10)]
+                                    , requires        = 'DM'.fromList [] // TODO Cooling
+                                    , produces        = 'DM'.fromList [(PowerCable, 10)]
                                     }
                                    ])
                              , (9, [{ Device // Gun
                                     | objectId        = 64
                                     , connectedCables = [2]
-                                    , requires        = [(PowerCable, 1)]
-                                    , produces        = []
+                                    , requires        = 'DM'.fromList [(PowerCable, 1)]
+                                    , produces        = 'DM'.fromList []
                                     }
                                    ])
                              ]
   }
 
 devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
-devicesForCable invMap {cableId, cableType} {cableMapping, devices}
+devicesForCable invMap cable=:{cableId} {cableMapping, devices}
   = flatten [  case 'DIS'.get roomNo invMap of
                  Just objMap -> case 'DIS'.get device.objectId objMap of
                                   Just obj -> [obj]
@@ -174,20 +182,11 @@ devicesForCable invMap {cableId, cableType} {cableMapping, devices}
                  _           -> []
             \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
             ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
-            |  requiresCable cableType device
+            |  requiresCable cable device
             ]
   where
-  // TODO Take quantity into account
-  requiresCable cableType device = not (isEmpty [0 \\ (cableType`, _) <- device.requires
-                                                | cableType === cableType`])
-
-
-// devicesForCable invMap {cableId, toRoom} {devices}
-//   # objIds = [(inRoom, objectId) \\ (inRoom, cableObjects) <- 'DIS'.toList devices, (cableId`, objectId) <- 'DIS'.toL
-//   = [ obj \\ obj <- flatten ('DIS'.elems invMap) | isRelevantObj objIds obj.objId toRoom]
-//   where
-//   isRelevantObj objIds objId toRoom
-//     = not (isEmpty [0 \\ (inRoom, objId`) <- objIds | objId == objId` && inRoom == toRoom])
+  // TODO Take resource quantity and redundancy into account
+  requiresCable {cableType} device = isJust ('DM'.get cableType device.requires)
 
 cutCable :: RoomNumber CableId Network -> Network
 cutCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) False op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
