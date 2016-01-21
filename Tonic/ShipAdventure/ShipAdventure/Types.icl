@@ -279,7 +279,8 @@ mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
                       , (mkActorBadgeBackground Available,             "Available person")
                       , (mkActorBadgeBackground NotAvailable,          "Unavailable person")
                       , (mkActorBadgeBackground Busy,                  "Busy person")
-                      , (mkInventoryBadgeBackground,                   "Room inventory")
+                      , (mkInventoryBadgeBackground True,              "Portable object")
+                      , (mkInventoryBadgeBackground False,             "Non-portable object")
                       , (mkUpDown 0 (Up 0) 'DM'.newMap,                "Staircase up")
                       , (mkUpDown 0 (Down 0) 'DM'.newMap,              "Staircase down")
                       ]
@@ -336,7 +337,7 @@ roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number
                         _        -> []
   #! numInv         = length inventory
   #! inventoryBadge = if (numInv > 0)
-                        (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge (toString i % (0,0)))) inventory) Nothing)
+                        (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge i (toString i % (0, 1)))) inventory) Nothing)
                         (empty zero zero)
   #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
   #! upDownExits    = above (repeat AtMiddleX) [] (map (\e -> scale multiplier multiplier (mkUpDown number e exitLocks) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
@@ -410,7 +411,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! userStr     = toString userName
   #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
   #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
-  #! inventory   = map (\i -> mkInventoryBadge (toString i % (0,0))) carrying
+  #! inventory   = map (\i -> mkInventoryBadge i (toString i % (0, 1))) carrying
   = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
 mkActorBadgeBackground :: !Availability -> Image a
@@ -419,18 +420,22 @@ mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occup
                                                                         NotAvailable -> "black"
                                                                         Busy         -> "orange")}
 
-mkInventoryBadge :: !String -> Image b
-mkInventoryBadge str
-  #! txt   = text myFontDef str <@< { fill = toSVGColor "white" }
-  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just mkInventoryBadgeBackground)
+mkInventoryBadge :: MyObject !String -> Image b
+mkInventoryBadge obj str
+  #! txt = text myFontDef str <@< { fill = toSVGColor "white" }
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground obj.portable))
 
-mkInventoryBadgeBackground :: Image b
-mkInventoryBadgeBackground
-  = badgeImage <@< { fill = toSVGColor "purple" }
+mkInventoryBadgeBackground :: Bool -> Image b
+mkInventoryBadgeBackground portable
+  = wideBadgeImage <@< { fill = toSVGColor (if portable "BlueViolet" "purple") }
 
 badgeImage :: Image a
 badgeImage = rect (px 11.0) (px 11.0) <@< { stroke = toSVGColor "black" }
                                       <@< { strokewidth = px 1.0 }
+
+wideBadgeImage :: Image a
+wideBadgeImage = rect (px 16.0) (px 11.0) <@< { stroke = toSVGColor "black" }
+                                          <@< { strokewidth = px 1.0 }
 // ------------
 
 isHigh :: !Detector -> Bool
