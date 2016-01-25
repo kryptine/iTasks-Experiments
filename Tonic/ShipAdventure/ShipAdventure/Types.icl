@@ -115,6 +115,22 @@ manageDevices
                                       \\ cable <- 'DIS'.elems network.cables
                                       | not (isOperational cable.cableId network.cableMapping)
                                       ]
+    where
+    devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
+    devicesForCable invMap cable=:{cableId} {cableMapping, devices}
+      = flatten [  case 'DIS'.get roomNo invMap of
+                     Just objMap -> case 'DIS'.get device.objectId objMap of
+                                      Just obj -> [obj]
+                                      _        -> []
+                     _           -> []
+                \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
+                ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
+                |  requiresCable cable device
+                ]
+      where
+      // TODO Take resource quantity and redundancy into account
+      requiresCable {cableType} device = isJust ('DM'.get cableType device.requires)
+
   mkCableDesc roomNo {Cable | cableId, description}
     = "'" +++ description +++ " " +++ toString cableId +++ "' in room " +++ toString roomNo
   cutCableTask roomNo cable
@@ -172,21 +188,6 @@ myNetwork = sharedStore "myNetwork"
                                    ])
                              ]
   }
-
-devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
-devicesForCable invMap cable=:{cableId} {cableMapping, devices}
-  = flatten [  case 'DIS'.get roomNo invMap of
-                 Just objMap -> case 'DIS'.get device.objectId objMap of
-                                  Just obj -> [obj]
-                                  _        -> []
-                 _           -> []
-            \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
-            ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
-            |  requiresCable cable device
-            ]
-  where
-  // TODO Take resource quantity and redundancy into account
-  requiresCable {cableType} device = isJust ('DM'.get cableType device.requires)
 
 cutCable :: RoomNumber CableId Network -> Network
 cutCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) False op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
@@ -334,7 +335,7 @@ mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
 floorImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 floorImage exitLocks inventoryMap statusMap actorMap mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
-  #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
+  #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] (Just (raw (px 200.0) (px 200.0) "<rect />")))
   = (floor, tsrc)
   where
   f :: ![Room] !*TagSource -> *(!Image (a, MapClick), !*TagSource)

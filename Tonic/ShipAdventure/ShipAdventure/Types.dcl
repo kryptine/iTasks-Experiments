@@ -55,6 +55,7 @@ import GenLexOrd
 :: Capacity :== Int
 
 :: CableType = PowerCable | CoolingPipe | DataCable
+
 :: Device =
   { objectId        :: ObjectId
   , connectedCables :: [CableId]
@@ -108,9 +109,6 @@ showMap 			:: Task MapClick
 setRoomDetectors 	:: Task ()
 
 roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
-
-
-devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
 
 cutCable :: RoomNumber CableId Network -> Network
 
