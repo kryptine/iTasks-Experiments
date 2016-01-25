@@ -21,11 +21,11 @@ mkTable	headers a = Table headers (map row a) Nothing
   row x = [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
 
 myTasks :: [Workflow]
-myTasks = [ workflow "walk around"  "enter map, walk around, follow instructions of commander" currentUserWalkAround
-          , workflow "commander"    "give instructions to crew members on the map"             giveInstructions
-          , workflow "alter fire script" "define your own script for handling fires"           changeFireScript
-          , workflow "alter flood script" "define your own script for handling floods"         changeFloodScript
-          , workflow "alter smoke script" "define your own script for handling smoke"          changeSmokeScript
+myTasks = [ workflow "Walk around"  "Enter map, walk around, follow instructions of commander" currentUserWalkAround
+          , workflow "D-Officer"    "Give instructions to crew members on the map"             giveInstructions
+          , workflow "Alter fire script" "Define your own script for handling fires"           changeFireScript
+          , workflow "Alter flood script" "Define your own script for handling floods"         changeFloodScript
+          , workflow "Alter smoke script" "Define your own script for handling smoke"          changeSmokeScript
           ]
 
 currentUserWalkAround :: Task ()

@@ -81,33 +81,37 @@ myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
          , (20, 'DIS'.fromList [ (11, {Object | objId = 11, objType = FireExtinguisher})])
          ]
 
-manageDevices :: Task ()
-manageDevices
+manageDevices :: Bool -> Task ()
+manageDevices kitchen
+  | kitchen
   =               get myNetwork
-  >>= \network -> (viewSharedInformation "Device network" [ViewWith ppNetwork] (myNetwork |+| myInventoryMap)
-                  -&&-
-                  viewSharedInformation "Disabled devices" [ViewWith disabledDevices] (myNetwork |+| myInventoryMap)
-                  ) @! ()
-  >>* ([  OnAction (Action ("Cut " +++ mkCableDesc roomNo cable) []) (always (cutCableTask roomNo cable))
-       \\ cable  <- 'DIS'.elems network.cables
-       ,  (True, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
-       ]
-       ++
-       [  OnAction (Action ("Patch " +++ mkCableDesc roomNo cable) []) (always (patchCableTask roomNo cable))
-       \\ cable  <- 'DIS'.elems network.cables
-       ,  (False, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
-       ]
-       )
+  >>= \network -> viewDevices
+  >>*             ([  OnAction (Action ("Cut " +++ mkCableDesc roomNo cable) []) (always (cutCableTask roomNo cable))
+                   \\ cable  <- 'DIS'.elems network.cables
+                   ,  (True, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
+                   ]
+                   ++
+                   [  OnAction (Action ("Patch " +++ mkCableDesc roomNo cable) []) (always (patchCableTask roomNo cable))
+                   \\ cable  <- 'DIS'.elems network.cables
+                   ,  (False, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
+                   ]
+                   )
+  | otherwise = viewDevices
   where
-  ppNetwork (network, invMap) = (cablesView, devicesView)
+  viewDevices = (viewSharedInformation "Device network" [ViewWith ppNetwork] (myNetwork |+| myInventoryMap)
+                -&&-
+                viewSharedInformation "Disabled devices" [ViewWith disabledDevices] (myNetwork |+| myInventoryMap)
+                ) @! ()
+
+  ppNetwork (network, invMap) = (devicesView, cablesView)
     where
-    cablesView = ("Cables", network.cables)
+    cablesView = ("Cables", 'DIS'.elems network.cables)
     devicesView = ( "Devices"
-                  , [  ("Room " +++ toString roomNo, devices`)
+                  , [  ("Room " +++ toString roomNo, map toPPDevice devices`)
                     \\ (roomNo, devices`) <- 'DIS'.toList network.devices
                     ]
                   )
-  disabledDevices (network, invMap) = [  devicesForCable cable network
+  disabledDevices (network, invMap) = [ map toPPDevice (devicesForCable cable network)
                                       \\ cable <- 'DIS'.elems network.cables
                                       | not (isOperational cable.cableId network.cableMapping)
                                       ]
@@ -121,31 +125,66 @@ manageDevices
         ]
       where
       // TODO Take resource quantity and redundancy into account
-      requiresCable {cableType} device = isJust ('DM'.get cableType device.deviceType.requires)
+      requiresCable { Cable | cableType} device = isJust ('DM'.get cableType device.Device.deviceType.DeviceType.requires)
 
   mkCableDesc roomNo {Cable | cableId, description}
     = "'" +++ description +++ " " +++ toString cableId +++ "' in room " +++ toString roomNo
   cutCableTask roomNo cable
-    = upd (cutCable roomNo cable.cableId) myNetwork >>| manageDevices
+    = upd (cutCable roomNo cable.cableId) myNetwork >>| manageDevices kitchen
   patchCableTask roomNo cable
-    = upd (patchCable roomNo cable.cableId) myNetwork >>| manageDevices
+    = upd (patchCable roomNo cable.cableId) myNetwork >>| manageDevices kitchen
+
+:: PPDevice =
+  { description :: String
+  , deviceType  :: PPDeviceType
+  , deviceId    :: DeviceId
+  , inCables    :: [CableId]
+  , outCables   :: [CableId]
+  }
+
+:: PPDeviceType =
+  { kind     :: DeviceKind
+  , requires :: [(CableType, Capacity)]
+  , produces :: [(CableType, Capacity)]
+  }
+
+derive class iTask PPDevice, PPDeviceType
+
+toPPDevice :: Device -> PPDevice
+toPPDevice { Device | description, deviceType, deviceId, inCables, outCables } = { PPDevice
+                                                                                 | description = description
+                                                                                 , deviceType  = toPPDeviceType deviceType
+                                                                                 , deviceId    = deviceId
+                                                                                 , inCables    = inCables
+                                                                                 , outCables   = outCables
+                                                                                 }
+
+toPPDeviceType :: DeviceType -> PPDeviceType
+toPPDeviceType { DeviceType | kind, requires, produces } = { PPDeviceType
+                                                           | kind     = kind
+                                                           , requires = 'DM'.toList requires
+                                                           , produces = 'DM'.toList produces
+                                                           }
 
 isOperational cableId cableMapping = and [b \\ (b, _) <- fromMaybe [] ('DIS'.get cableId cableMapping)]
 
 // my logical devices
 
 radarDevice :: DeviceType
-radarDevice    = { kind     = Radar
+radarDevice    = { DeviceType
+                 | kind     = Radar
                  , requires = 'DM'.fromList [(PowerCable, 1)]
                  , produces = 'DM'.fromList []
                  }
 powerGenerator :: DeviceType
-powerGenerator = { kind     = PowerGenerator
+powerGenerator = { DeviceType
+                 | kind     = PowerGenerator
                  , requires = 'DM'.fromList [] // TODO Cooling
                  , produces = 'DM'.fromList [(PowerCable, 10)]
                  }
 gun :: DeviceType
-gun            = { kind     = Gun
+gun            = { DeviceType
+                 | kind     = Gun
                  , requires = 'DM'.fromList [(PowerCable, 1)]
                  , produces = 'DM'.fromList []
                  }
@@ -164,7 +203,7 @@ myNetwork = sharedStore "myNetwork"
                                     }
                                    ])
                              , (5, [{ Device // Power gen
-                                    | description	= "Power Generator"
+                                    | description	= "Main Power Generator"
                                     , deviceType	= powerGenerator
                                     , deviceId      = 24
                                     , inCables		= []
@@ -172,7 +211,7 @@ myNetwork = sharedStore "myNetwork"
                                      }
                                    ])
                              , (9, [{ Device // Gun
-                                    | description	= "gun"
+                                    | description	= "Forward Gun"
                                     , deviceType	= gun
                                     , deviceId      = 64
                                     , inCables 		= [2]
@@ -188,7 +227,7 @@ myNetwork = sharedStore "myNetwork"
                                   })
                             , (2, { Cable
                                   | cableId     = 2
-                                  , description = "Gun power cable"
+                                  , description = "Forward Gun power cable"
                                   , capacity    = 1
                                   , cableType   = PowerCable
                                   })
@@ -248,12 +287,14 @@ where
 
 setRoomDetectors :: Task ()
 setRoomDetectors 
-	= updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+	= ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
       >>* [OnValue (\tv -> case tv of
                              Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myStatusMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
-                   )]
+                   )])
+      -||
+      manageDevices True <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen
 
 setAlarm :: User (RoomNumber,Detector) Bool (Shared MyRoomStatusMap) -> Task ()
 setAlarm user (alarmLoc,detector) bool shStatusMap
@@ -283,11 +324,13 @@ resetDetector (FloodDetector b) = FloodDetector False
 // general map viewing
 
 showMap :: Task MapClick
-showMap = updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
-            >&> withSelection (return ())
-                  (\mapClick -> case mapClick of
-                                  SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\((((exitLocks, invMap), statusMap), actorMap), a) -> ((exitLocks, invMap, statusMap, actorMap, getRoomFromMap selRoom myMap), a)) (\((exitLocks, invMap, statusMap, actorMap, room), _) -> roomImage exitLocks invMap statusMap actorMap True room) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
-                                  _ -> return NoMapClick)
+showMap = (((updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+             >&> withSelection (return ())
+                   (\mapClick -> case mapClick of
+                                   SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\((((exitLocks, invMap), statusMap), actorMap), a) -> ((exitLocks, invMap, statusMap, actorMap, getRoomFromMap selRoom myMap), a)) (\((exitLocks, invMap, statusMap, actorMap, room), _) -> roomImage exitLocks invMap statusMap actorMap True room) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+                                   _ -> return NoMapClick)) <<@ ArrangeHorizontal)
+          -||
+          manageDevices False <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen
 
 myMap :: DungeonMap // map of the ship
 myMap = [floor0, floor1]
@@ -357,7 +400,7 @@ mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
 floorImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 floorImage exitLocks inventoryMap statusMap actorMap mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
-  #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] (Just (raw (px 200.0) (px 200.0) "<rect />")))
+  #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
   = (floor, tsrc)
   where
   f :: ![Room] !*TagSource -> *(!Image (a, MapClick), !*TagSource)

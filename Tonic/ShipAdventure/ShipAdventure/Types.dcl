@@ -120,4 +120,4 @@ roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorM
 cutCable :: RoomNumber CableId Network -> Network
 
 patchCable :: RoomNumber CableId Network -> Network
-manageDevices :: Task ()
+manageDevices :: Bool -> Task ()

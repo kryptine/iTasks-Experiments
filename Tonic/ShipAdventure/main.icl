@@ -19,5 +19,5 @@ Start world
       , publish "/map"     (WebApp []) (\_-> showMap)
       , publish "/alarm"   (WebApp []) (\_-> setRoomDetectors)
       , publish "/log"     (WebApp []) (\_-> showLog)
-      , publish "/devices" (WebApp []) (\_-> manageDevices)
+      , publish "/devices" (WebApp []) (\_-> manageDevices True)
       ] world
