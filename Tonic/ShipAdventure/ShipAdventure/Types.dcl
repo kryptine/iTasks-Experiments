@@ -71,8 +71,8 @@ import GenLexOrd
 :: Operational :== Bool
 
 derive gLexOrd CableType
-derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask DeviceType, DeviceKind, CableType, Network, Device, Cable
+derive class iTask Detector, ObjectType, ActorStatus, Availability, DeviceType
+derive class iTask Cable, Priority, MapClick, Network, Device, CableType, DeviceKind
 
 instance ==       ObjectType
 instance ==       Priority

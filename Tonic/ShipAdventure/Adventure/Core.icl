@@ -213,13 +213,13 @@ moveOneStep roomViz actor mbtask shStatusMap shRoomActorMap shRoomInventoryMap d
     = case 'DIS'.get room.number roomInventory of
         Just objects
           = [ OnAction (Action ("Fetch " <+++ object.objType) []) (always (pickupObject room.number object actor shRoomActorMap shRoomInventoryMap))
-            \\ object <- 'DIS'.elems objects | object.portable
+            \\ object <- 'DIS'.elems objects
             ]
         _ = []
 
   carryActions room actor
     = [ OnAction (Action ("Drop " <+++ object.objType) []) (always (dropObject room.number object actor shRoomActorMap shRoomInventoryMap))
-      \\ object <- actor.carrying | object.portable
+      \\ object <- actor.carrying
       ]
 
 pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))

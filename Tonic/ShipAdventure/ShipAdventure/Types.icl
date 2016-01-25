@@ -18,8 +18,8 @@ from Adventure.Logging import addLog
 import ShipAdventure.PathFinding
 
 derive gLexOrd CableType
-derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, Priority, MapClick, Network, Device, CableType
+derive class iTask Detector, ObjectType, ActorStatus, Availability, DeviceType
+derive class iTask Cable, Priority, MapClick, Network, Device, CableType, DeviceKind
 
 // std overloading instances
 
@@ -58,17 +58,17 @@ statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
   where
-  invs = [ (1,  'DIS'.fromList [ (42, {Object | objId = 42, objType = Radar })
+  invs = [ /*(1,  'DIS'.fromList [ (42, {Object | objId = 42, objType = Radar })
                                ])
-         , (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher})
+         ,*/ (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher})
                                ])
-         , (5,  'DIS'.fromList [ (24, {Object | objId = 24, objType = PowerGenerator })
-                               ])
+         //, (5,  'DIS'.fromList [ (24, {Object | objId = 24, objType = PowerGenerator })
+                               //])
          , (7,  'DIS'.fromList [ (2,  {Object | objId = 2,  objType = FireBlanket })
                                ])
          , (8,  'DIS'.fromList [ (3,  {Object | objId = 3,  objType = FireExtinguisher })])
          , (9,  'DIS'.fromList [ (4,  {Object | objId = 4,  objType = FireBlanket } )
-                               , (64, {Object | objId = 64, objType = Gun })
+                               //, (64, {Object | objId = 64, objType = Gun })
                                ])
          , (10, 'DIS'.fromList [ (5,  {Object | objId = 5,  objType = FireExtinguisher })])
          , (14, 'DIS'.fromList [ (6,  {Object | objId = 6,  objType = FireExtinguisher })])
@@ -107,25 +107,21 @@ manageDevices
                     \\ (roomNo, devices`) <- 'DIS'.toList network.devices
                     ]
                   )
-  disabledDevices (network, invMap) = [  devicesForCable invMap cable network
+  disabledDevices (network, invMap) = [  devicesForCable cable network
                                       \\ cable <- 'DIS'.elems network.cables
                                       | not (isOperational cable.cableId network.cableMapping)
                                       ]
     where
-    devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
-    devicesForCable invMap cable=:{cableId} {cableMapping, devices}
-      = flatten [  case 'DIS'.get roomNo invMap of
-                     Just objMap -> case 'DIS'.get device.objId objMap of
-                                      Just obj -> [obj]
-                                      _        -> []
-                     _           -> []
-                \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
-                ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
-                |  requiresCable cable device
-                ]
+    devicesForCable :: Cable Network -> [Device]
+    devicesForCable cable=:{cableId} {cableMapping, devices}
+      = [  device
+        \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
+        ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
+        |  requiresCable cable device
+        ]
       where
       // TODO Take resource quantity and redundancy into account
-      requiresCable {cableType} device = isJust ('DM'.get cableType device.requires)
+      requiresCable {cableType} device = isJust ('DM'.get cableType device.deviceType.requires)
 
   mkCableDesc roomNo {Cable | cableId, description}
     = "'" +++ description +++ " " +++ toString cableId +++ "' in room " +++ toString roomNo
@@ -139,20 +135,20 @@ isOperational cableId cableMapping = and [b \\ (b, _) <- fromMaybe [] ('DIS'.get
 // my logical devices
 
 radarDevice :: DeviceType
-radarDevice 	= 	{ kind 		= Radar
-               		, requires	= 'DM'.fromList [(PowerCable, 1)]
-                	, produces	= 'DM'.fromList []
-               	 	}
+radarDevice    = { kind     = Radar
+                 , requires = 'DM'.fromList [(PowerCable, 1)]
+                 , produces = 'DM'.fromList []
+                 }
 powerGenerator :: DeviceType
-powerGenerator = 	{ kind 		= PowerGenerator
-               		, requires	= 'DM'.fromList []						// TODO Cooling
-                	, produces	= 'DM'.fromList [(PowerCable, 10)]
-               	 	}             
+powerGenerator = { kind     = PowerGenerator
+                 , requires = 'DM'.fromList [] // TODO Cooling
+                 , produces = 'DM'.fromList [(PowerCable, 10)]
+                 }
 gun :: DeviceType
-gun	 = 				{ kind 		= Gun
-               		, requires	= 'DM'.fromList [(PowerCable, 1)]		
-                	, produces	= 'DM'.fromList [[]]
-               	 	}             
+gun            = { kind     = Gun
+                 , requires = 'DM'.fromList [(PowerCable, 1)]
+                 , produces = 'DM'.fromList []
+                 }
 
 // my physical mapping of the devices in a network
 
@@ -493,7 +489,7 @@ mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occup
 mkInventoryBadge :: MyObject !String -> Image b
 mkInventoryBadge obj str
   #! txt = text myFontDef str <@< { fill = toSVGColor "white" }
-  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just True)
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground True))
 
 mkInventoryBadgeBackground :: Bool -> Image b
 mkInventoryBadgeBackground portable
