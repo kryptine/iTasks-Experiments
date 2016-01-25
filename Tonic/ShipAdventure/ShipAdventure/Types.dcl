@@ -25,47 +25,54 @@ import GenLexOrd
 :: ObjectType	= 	FireExtinguisher
 				| 	FireBlanket
 				| 	Plug
-				| 	Radar
-				| 	PowerGen
-				| 	CoolingPump
-				| 	Gun
 
 :: ActorStatus	= 	{ occupied	:: Availability
 					}
 :: Availability	=	Available | NotAvailable | Busy  
+
 :: Priority		=	Low | Normal | High | Highest
 
-:: CableId :== Int
+// logical devices
 
-:: Cable = // Edge
-  { cableId     :: CableId
-  , description :: String
-  , capacity    :: Capacity
-  , cableType   :: CableType
+:: DeviceType =
+  { kind		    :: 	DeviceKind
+  , requires        :: 	Map CableType Capacity
+  , produces        :: 	Map CableType Capacity
   }
+:: DeviceKind		=	Radar
+					| 	PowerGenerator
+					| 	CoolingPump
+					| 	Gun
+:: CableType 		= 	PowerCable | CoolingPipe | DataCable
+:: Capacity 		:== Int
 
-:: Operational :== Bool
+// physical devices 
 
 :: Network =
-  { cables       :: IntMap Cable        // [CableId |-> Cable]
-  , cableMapping :: IntMap [(Operational, RoomNumber)] // [CableId |-> RoomNumbers]
-  , devices      :: IntMap [Device]     // [RoomNumber |-> Devices]
+  { devices      	:: IntMap [Device]     					// [RoomNumber |-> Devices]
+  , cables       	:: IntMap Cable        					// [CableId |-> Cable]
+  , cableMapping 	:: IntMap [(Operational, RoomNumber)] 	// [CableId |-> RoomNumbers]
   }
-
-:: Capacity :== Int
-
-:: CableType = PowerCable | CoolingPipe | DataCable
-
 :: Device =
-  { objectId        :: ObjectId
-  , connectedCables :: [CableId]
-  , requires        :: Map CableType Capacity
-  , produces        :: Map CableType Capacity
+  { description		::	String
+  , deviceType		::	DeviceType
+  , deviceId		::  DeviceId
+  , inCables 		:: 	[CableId]
+  , outCables 		:: 	[CableId]
   }
+:: DeviceId			:== Int
+:: CableId 			:== Int
+:: Cable = 													// Edge
+  { description 	:: String
+  , cableId     	:: CableId
+  , capacity    	:: Capacity
+  , cableType   	:: CableType
+  }
+:: Operational :== Bool
 
 derive gLexOrd CableType
 derive class iTask Detector, ObjectType, ActorStatus, Availability
-derive class iTask Cable, Priority, MapClick, Network, Device, CableType
+derive class iTask DeviceType, DeviceKind, CableType, Network, Device, Cable
 
 instance ==       ObjectType
 instance ==       Priority

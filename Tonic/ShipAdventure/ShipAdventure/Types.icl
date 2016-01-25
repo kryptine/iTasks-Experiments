@@ -30,10 +30,6 @@ instance toString ObjectType where
   toString FireExtinguisher = "Extinguiser"
   toString FireBlanket      = "Blanket"
   toString Plug             = "Plug"
-  toString Radar            = "Radar"
-  toString PowerGen         = "Power generator"
-  toString CoolingPump      = "Cooling pump"
-  toString Gun              = "Gun"
 
 instance toString Exit where toString exit = toSingleLineText exit
 
@@ -62,27 +58,27 @@ statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
   where
-  invs = [ (1,  'DIS'.fromList [ (42, {Object | objId = 42, objType = Radar, reusable = True, portable = False, quantity = 1 })
+  invs = [ (1,  'DIS'.fromList [ (42, {Object | objId = 42, objType = Radar })
                                ])
-         , (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })
+         , (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher})
                                ])
-         , (5,  'DIS'.fromList [ (24, {Object | objId = 24, objType = PowerGen, reusable = True, portable = False, quantity = 1 })
+         , (5,  'DIS'.fromList [ (24, {Object | objId = 24, objType = PowerGenerator })
                                ])
-         , (7,  'DIS'.fromList [ (2,  {Object | objId = 2,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 })
+         , (7,  'DIS'.fromList [ (2,  {Object | objId = 2,  objType = FireBlanket })
                                ])
-         , (8,  'DIS'.fromList [ (3,  {Object | objId = 3,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
-         , (9,  'DIS'.fromList [ (4,  {Object | objId = 4,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 } )
-                               , (64, {Object | objId = 64, objType = Gun, reusable = True, portable = False, quantity = 1 })
+         , (8,  'DIS'.fromList [ (3,  {Object | objId = 3,  objType = FireExtinguisher })])
+         , (9,  'DIS'.fromList [ (4,  {Object | objId = 4,  objType = FireBlanket } )
+                               , (64, {Object | objId = 64, objType = Gun })
                                ])
-         , (10, 'DIS'.fromList [ (5,  {Object | objId = 5,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
-         , (14, 'DIS'.fromList [ (6,  {Object | objId = 6,  objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
-         , (17, 'DIS'.fromList [ (7,  {Object | objId = 7,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 })
-                               , (8,  {Object | objId = 8,  objType = Plug, reusable = False, portable = True, quantity = 1 })
+         , (10, 'DIS'.fromList [ (5,  {Object | objId = 5,  objType = FireExtinguisher })])
+         , (14, 'DIS'.fromList [ (6,  {Object | objId = 6,  objType = FireExtinguisher })])
+         , (17, 'DIS'.fromList [ (7,  {Object | objId = 7,  objType = FireBlanket })
+                               , (8,  {Object | objId = 8,  objType = Plug })
                                ])
-         , (19, 'DIS'.fromList [ (9,  {Object | objId = 9,  objType = FireBlanket, reusable = False, portable = True, quantity = 1 })
-                               , (10, {Object | objId = 10, objType = Plug, reusable = False, portable = True, quantity = 1 })
+         , (19, 'DIS'.fromList [ (9,  {Object | objId = 9,  objType = FireBlanket })
+                               , (10, {Object | objId = 10, objType = Plug })
                                ])
-         , (20, 'DIS'.fromList [ (11, {Object | objId = 11, objType = FireExtinguisher, reusable = False, portable = True, quantity = 1 })])
+         , (20, 'DIS'.fromList [ (11, {Object | objId = 11, objType = FireExtinguisher})])
          ]
 
 manageDevices :: Task ()
@@ -119,7 +115,7 @@ manageDevices
     devicesForCable :: MyRoomInventoryMap Cable Network -> [MyObject]
     devicesForCable invMap cable=:{cableId} {cableMapping, devices}
       = flatten [  case 'DIS'.get roomNo invMap of
-                     Just objMap -> case 'DIS'.get device.objectId objMap of
+                     Just objMap -> case 'DIS'.get device.objId objMap of
                                       Just obj -> [obj]
                                       _        -> []
                      _           -> []
@@ -140,10 +136,55 @@ manageDevices
 
 isOperational cableId cableMapping = and [b \\ (b, _) <- fromMaybe [] ('DIS'.get cableId cableMapping)]
 
+// my logical devices
+
+radarDevice :: DeviceType
+radarDevice 	= 	{ kind 		= Radar
+               		, requires	= 'DM'.fromList [(PowerCable, 1)]
+                	, produces	= 'DM'.fromList []
+               	 	}
+powerGenerator :: DeviceType
+powerGenerator = 	{ kind 		= PowerGenerator
+               		, requires	= 'DM'.fromList []						// TODO Cooling
+                	, produces	= 'DM'.fromList [(PowerCable, 10)]
+               	 	}             
+gun :: DeviceType
+gun	 = 				{ kind 		= Gun
+               		, requires	= 'DM'.fromList [(PowerCable, 1)]		
+                	, produces	= 'DM'.fromList [[]]
+               	 	}             
+
+// my physical mapping of the devices in a network
+
 myNetwork :: RWShared () Network Network
 myNetwork = sharedStore "myNetwork"
   { Network
-  | cables = 'DIS'.fromList [ (1, { Cable
+  | devices = 'DIS'.fromList [ (1, [{ Device // Radar
+                                    | description	= "Radar"
+                                    , deviceType	= radarDevice
+                                    , deviceId		= 42
+                                    , inCables		= [1]
+                                    , outCables		= []
+                                    }
+                                   ])
+                             , (5, [{ Device // Power gen
+                                    | description	= "Power Generator"
+                                    , deviceType	= powerGenerator
+                                    , deviceId      = 24
+                                    , inCables		= []
+                                    , outCables		= [1, 2]
+                                     }
+                                   ])
+                             , (9, [{ Device // Gun
+                                    | description	= "gun"
+                                    , deviceType	= gun
+                                    , deviceId      = 64
+                                    , inCables 		= [2]
+                                    , outCables		= []
+                                    }
+                                   ])
+                             ]
+	,cables = 'DIS'.fromList [ (1, { Cable
                                   | cableId     = 1
                                   , description = "Radar power cable"
                                   , capacity    = 1
@@ -165,29 +206,14 @@ myNetwork = sharedStore "myNetwork"
                                         , (True, 9)
                                         ])
                                   ]
-  , devices = 'DIS'.fromList [ (1, [{ Device // Radar
-                                    | objectId        = 42
-                                    , connectedCables = [1]
-                                    , requires        = 'DM'.fromList [(PowerCable, 1)]
-                                    , produces        = 'DM'.fromList []
-                                    }
-                                   ])
-                             , (5, [{ Device // Power gen
-                                    | objectId        = 24
-                                    , connectedCables = [1, 2]
-                                    , requires        = 'DM'.fromList [] // TODO Cooling
-                                    , produces        = 'DM'.fromList [(PowerCable, 10)]
-                                    }
-                                   ])
-                             , (9, [{ Device // Gun
-                                    | objectId        = 64
-                                    , connectedCables = [2]
-                                    , requires        = 'DM'.fromList [(PowerCable, 1)]
-                                    , produces        = 'DM'.fromList []
-                                    }
-                                   ])
-                             ]
   }
+
+                
+                
+
+
+
+
 
 cutCable :: RoomNumber CableId Network -> Network
 cutCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) False op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
@@ -467,7 +493,7 @@ mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occup
 mkInventoryBadge :: MyObject !String -> Image b
 mkInventoryBadge obj str
   #! txt = text myFontDef str <@< { fill = toSVGColor "white" }
-  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground obj.portable))
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just True)
 
 mkInventoryBadgeBackground :: Bool -> Image b
 mkInventoryBadgeBackground portable

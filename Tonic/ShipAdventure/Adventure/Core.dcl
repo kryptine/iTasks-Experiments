@@ -19,9 +19,6 @@ import GenLexOrd
 :: Object objType =
   { objId    :: ObjectId
   , objType  :: objType
-  , reusable :: Bool
-  , portable :: Bool
-  , quantity :: Int
   }
 
 :: ObjectId   :== Int
