@@ -38,6 +38,9 @@ where toString (FireDetector _)  = "Fire Alarm"
 	  toString (SmokeDetector _) = "Smoke Alarm"
 	  toString (FloodDetector _) = "Flood Alarm"
 
+instance toString Device
+where toString {Device | description} = description
+
 instance < CableType where
   (<) l r = case l =?= r of
               LT -> True
@@ -58,17 +61,12 @@ statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
   where
-  invs = [ /*(1,  'DIS'.fromList [ (42, {Object | objId = 42, objType = Radar })
+  invs = [ (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher})
                                ])
-         ,*/ (4,  'DIS'.fromList [ (1,  {Object | objId = 1,  objType = FireExtinguisher})
-                               ])
-         //, (5,  'DIS'.fromList [ (24, {Object | objId = 24, objType = PowerGenerator })
-                               //])
          , (7,  'DIS'.fromList [ (2,  {Object | objId = 2,  objType = FireBlanket })
                                ])
          , (8,  'DIS'.fromList [ (3,  {Object | objId = 3,  objType = FireExtinguisher })])
          , (9,  'DIS'.fromList [ (4,  {Object | objId = 4,  objType = FireBlanket } )
-                               //, (64, {Object | objId = 64, objType = Gun })
                                ])
          , (10, 'DIS'.fromList [ (5,  {Object | objId = 5,  objType = FireExtinguisher })])
          , (14, 'DIS'.fromList [ (6,  {Object | objId = 6,  objType = FireExtinguisher })])
@@ -86,24 +84,18 @@ manageDevices kitchen
   | kitchen
   =               get myNetwork
   >>= \network -> viewDevices
-  >>*             ([  OnAction (Action ("Cut " +++ mkCableDesc roomNo cable) []) (always (cutCableTask roomNo cable))
-                   \\ cable  <- 'DIS'.elems network.cables
-                   ,  (True, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
-                   ]
-                   ++
-                   [  OnAction (Action ("Patch " +++ mkCableDesc roomNo cable) []) (always (patchCableTask roomNo cable))
-                   \\ cable  <- 'DIS'.elems network.cables
-                   ,  (False, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
-                   ]
-                   )
+  >>*             [  OnAction (Action (if enabled "/Cut " "/Patch " +++ mkCableDesc roomNo cable) []) (always (if enabled (cutCableTask roomNo cable) (patchCableTask roomNo cable)))
+                  \\ cable  <- 'DIS'.elems network.cables
+                  ,  (enabled, roomNo) <- fromMaybe [] ('DIS'.get cable.cableId network.cableMapping)
+                  ]
   | otherwise = viewDevices
   where
-  viewDevices = (viewSharedInformation "Device network" [ViewWith ppNetwork] (myNetwork |+| myInventoryMap)
-                -&&-
-                viewSharedInformation "Disabled devices" [ViewWith disabledDevices] (myNetwork |+| myInventoryMap)
+  viewDevices = (viewSharedInformation "Disabled devices" [ViewWith disabledDevices] myNetwork
+                 -&&-
+                 viewSharedInformation "Device network" [ViewWith ppNetwork] myNetwork
                 ) @! ()
 
-  ppNetwork (network, invMap) = (devicesView, cablesView)
+  ppNetwork network = (devicesView, cablesView)
     where
     cablesView = ("Cables", 'DIS'.elems network.cables)
     devicesView = ( "Devices"
@@ -111,10 +103,10 @@ manageDevices kitchen
                     \\ (roomNo, devices`) <- 'DIS'.toList network.devices
                     ]
                   )
-  disabledDevices (network, invMap) = [ map toPPDevice (devicesForCable cable network)
-                                      \\ cable <- 'DIS'.elems network.cables
-                                      | not (isOperational cable.cableId network.cableMapping)
-                                      ]
+  disabledDevices network = [  map toPPDevice (devicesForCable cable network)
+                            \\ cable <- 'DIS'.elems network.cables
+                            |  not (isOperational cable.cableId network.cableMapping)
+                            ]
     where
     devicesForCable :: Cable Network -> [Device]
     devicesForCable cable=:{cableId} {cableMapping, devices}
@@ -243,13 +235,6 @@ myNetwork = sharedStore "myNetwork"
                                   ]
   }
 
-                
-                
-
-
-
-
-
 cutCable :: RoomNumber CableId Network -> Network
 cutCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) False op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
 
@@ -287,7 +272,7 @@ where
 
 setRoomDetectors :: Task ()
 setRoomDetectors 
-	= ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+	= ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
       >>* [OnValue (\tv -> case tv of
                              Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myStatusMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
@@ -324,13 +309,13 @@ resetDetector (FloodDetector b) = FloodDetector False
 // general map viewing
 
 showMap :: Task MapClick
-showMap = (((updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+showMap = (((updateInformationWithShared "Map Status" [imageUpdate id (mapImage False myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
              >&> withSelection (return ())
                    (\mapClick -> case mapClick of
-                                   SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\((((exitLocks, invMap), statusMap), actorMap), a) -> ((exitLocks, invMap, statusMap, actorMap, getRoomFromMap selRoom myMap), a)) (\((exitLocks, invMap, statusMap, actorMap, room), _) -> roomImage exitLocks invMap statusMap actorMap True room) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap) NoMapClick
+                                   SelectRoom selRoom -> updateInformationWithShared "Room Status" [imageUpdate (\(((((exitLocks, invMap), statusMap), actorMap), network), a) -> ((exitLocks, invMap, statusMap, actorMap, network, getRoomFromMap selRoom myMap), a)) (\((exitLocks, invMap, statusMap, actorMap, network, room), _) -> roomImage exitLocks invMap statusMap actorMap network True room) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
                                    _ -> return NoMapClick)) <<@ ArrangeHorizontal)
           -||
-          manageDevices False <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen
+          manageDevices True <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen
 
 myMap :: DungeonMap // map of the ship
 myMap = [floor0, floor1]
@@ -378,9 +363,9 @@ myMap = [floor0, floor1]
   room18    = {name = "room 1.8",   number = 20, exits = [North 18, Up 10]}
 
 // making an image from the map ...
-mapImage :: !Bool !DungeonMap !(!(!(!(!RoomExitLockMap, !MyRoomInventoryMap), !MyRoomStatusMap), !MyRoomActorMap), MapClick) !*TagSource -> Image (a, MapClick)
-mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
-  #! (floors, tsrc) = mapSt (floorImage exitLocks inventoryMap statusMap actorMap mngmnt) (zip2 m (reverse [0..length m])) tsrc
+mapImage :: !Bool !DungeonMap !(!(!(!(!(!RoomExitLockMap, !MyRoomInventoryMap), !MyRoomStatusMap), !MyRoomActorMap), !Network), MapClick) !*TagSource -> Image (a, MapClick)
+mapImage mngmnt m (((((exitLocks, inventoryMap), statusMap), actorMap), network), _) tsrc
+  #! (floors, tsrc) = mapSt (floorImage exitLocks inventoryMap statusMap actorMap network mngmnt) (zip2 m (reverse [0..length m])) tsrc
   #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
   #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True),  "Fire detected")
                       , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
@@ -397,15 +382,15 @@ mapImage mngmnt m ((((exitLocks, inventoryMap), statusMap), actorMap), _) tsrc
   #! legend         = above (repeat AtLeft) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) legendElems) Nothing
   = beside [] [] [allFloors, empty (px 8.0) (px 8.0), legend] Nothing
 
-floorImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-floorImage exitLocks inventoryMap statusMap actorMap mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
+floorImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Network !Bool !(!Floor, !Int) !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+floorImage exitLocks inventoryMap statusMap actorMap network mngmnt (floor, floorNo) [(floorTag, uFloorTag) : tsrc]
   #! (rooms, tsrc) = mapSt f floor tsrc
   #! floor         = tag uFloorTag (above (repeat AtMiddleX) [] [text myFontDef ("Deck " +++ toString floorNo) : rooms] Nothing)
   = (floor, tsrc)
   where
   f :: ![Room] !*TagSource -> *(!Image (a, MapClick), !*TagSource)
   f rooms tsrc
-    #! (rooms`, tsrc) = mapSt (roomImage` inventoryMap statusMap actorMap mngmnt False exitLocks) rooms tsrc
+    #! (rooms`, tsrc) = mapSt (roomImage` inventoryMap statusMap actorMap network mngmnt False exitLocks) rooms tsrc
     = (beside (repeat AtMiddleY) [] rooms` Nothing, tsrc)
 
 roomDim =: 64.0
@@ -413,50 +398,53 @@ exitWidth =: 16.0
 
 myFontDef = normalFontDef "Arial" 10.0
 
-roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
-roomImage exitLocks inventoryMap statusMap actorMap zoomed (Just room) tsrc = fst (roomImage` inventoryMap statusMap actorMap False zoomed exitLocks room tsrc)
-roomImage _ _ _ _ _ _ _                                                     = empty zero zero
+roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Network !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
+roomImage exitLocks inventoryMap statusMap actorMap network zoomed (Just room) tsrc = fst (roomImage` inventoryMap statusMap actorMap network False zoomed exitLocks room tsrc)
+roomImage _ _ _ _ _ _ _ _                                                           = empty zero zero
 
-roomImage` :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
-roomImage` inventoryMap statusMap actorMap mngmnt zoomed exitLocks room=:{number, exits} tsrc
+roomImage` :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Network !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
+roomImage` inventoryMap statusMap actorMap network mngmnt zoomed exitLocks room=:{number, exits} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
-  #! numNorth       = length northEs
-  #! numSouth       = length southEs
-  #! numEast        = length eastEs
-  #! numWest        = length westEs
-  #! widthMul       = toReal (max (max numNorth numSouth) 1)
-  #! heightMul      = toReal (max (max (length eastEs) (length westEs)) 1)
-  #! multiplier     = if zoomed 2.0 1.0
-  #! bgWidth        = multiplier * roomDim * widthMul
-  #! bgHeight       = multiplier * roomDim * heightMul
-  #! bg             = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
-  #! bg             = bg <@< { onclick = onClick (SelectRoom number), local = False }
-  #! roomStatus     = case 'DIS'.get number statusMap of
-                        Just roomStatus = roomStatus
-                        _
-                        | mngmnt    = [FireDetector False, SmokeDetector False, FloodDetector False] // TODO This isnt really correct yet. When we get Just, other buttons will disappear. We need to fill the shares to make this all work.
-                        | otherwise = []
-  #! statusBadges   = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
-  #! actors         = case 'DIS'.get number actorMap of
-                        Just actors -> actors
-                        _           -> []
-  #! actorBadges    = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
-  #! inventory      = case 'DIS'.get number inventoryMap of
-                        Just inv -> 'DIS'.elems inv
-                        _        -> []
-  #! numInv         = length inventory
-  #! inventoryBadge = if (numInv > 0)
-                        (beside (repeat AtMiddleY) [] (map (\i -> scale multiplier multiplier (mkInventoryBadge i (toString i % (0, 1)))) inventory) Nothing)
-                        (empty zero zero)
-  #! roomNo         = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
-  #! upDownExits    = above (repeat AtMiddleX) [] (map (\e -> scale multiplier multiplier (mkUpDown number e exitLocks) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
+  #! numNorth        = length northEs
+  #! numSouth        = length southEs
+  #! numEast         = length eastEs
+  #! numWest         = length westEs
+  #! widthMul        = toReal (max (max numNorth numSouth) 1)
+  #! heightMul       = toReal (max (max (length eastEs) (length westEs)) 1)
+  #! multiplier      = if zoomed 2.0 1.0
+  #! bgWidth         = multiplier * roomDim * widthMul
+  #! bgHeight        = multiplier * roomDim * heightMul
+  #! bg              = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
+  #! bg              = bg <@< { onclick = onClick (SelectRoom number), local = False }
+  #! roomStatus      = case 'DIS'.get number statusMap of
+                         Just roomStatus = roomStatus
+                         _
+                         | mngmnt    = [FireDetector False, SmokeDetector False, FloodDetector False] // TODO This isnt really correct yet. When we get Just, other buttons will disappear. We need to fill the shares to make this all work.
+                         | otherwise = []
+  #! statusBadges    = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
+  #! actors          = case 'DIS'.get number actorMap of
+                         Just actors -> actors
+                         _           -> []
+  #! actorBadges     = above (repeat AtMiddleX) [] (map (scale multiplier multiplier o mkActorBadge) actors) Nothing
+  #! inventory       = case 'DIS'.get number inventoryMap of
+                         Just inv -> 'DIS'.elems inv
+                         _        -> []
+  #! devices         = fromMaybe [] ('DIS'.get number network.devices)
+  #! inventoryBadges = map (\i -> scale multiplier multiplier (mkInventoryBadge True (toString i % (0, 1)))) inventory
+  #! deviceBadges    = map (\i -> scale multiplier multiplier (mkInventoryBadge False (toString i % (0, 1)))) devices
+  #! allBadges       = inventoryBadges ++ deviceBadges
+  #! inventoryBadges = if (length allBadges > 0)
+                         (beside (repeat AtMiddleY) [] allBadges Nothing)
+                         (empty zero zero)
+  #! roomNo          = text myFontDef (toString number) <@< { onclick = onClick (SelectRoom number), local = False }
+  #! upDownExits     = above (repeat AtMiddleX) [] (map (\e -> scale multiplier multiplier (mkUpDown number e exitLocks) <@< { onclick = onClick (ToggleDoor number e), local = False }) (upEs ++ downEs)) Nothing
   #! (topExitAligns, topExitOffsets, topExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numNorth (AtLeft, AtTop)    northEs
   #! (botExitAligns, botExitOffsets, botExitImgs) = mkAsOsIs multiplier (\sp -> (sp, zero)) (rect (px (exitWidth * multiplier)) (px (4.0 * multiplier))) bgWidth  numSouth (AtLeft, AtBottom) southEs
   #! (rExitAligns,   rExitOffsets,   rExitImgs)   = mkAsOsIs multiplier (\sp -> (zero, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numEast  (AtRight, AtTop)   eastEs
   #! (lExitAligns,   lExitOffsets,   lExitImgs)   = mkAsOsIs multiplier (\sp -> (zero, sp)) (rect (px (4.0 * multiplier)) (px (exitWidth * multiplier))) bgHeight numWest  (AtLeft, AtTop)    westEs
   #! total          = overlay ([(AtLeft, AtTop), (AtRight, AtTop), (AtMiddleX, AtMiddleY), (AtLeft, AtBottom), (AtRight, AtBottom)] ++ topExitAligns ++ botExitAligns ++ rExitAligns ++ lExitAligns)
                               ([(px 3.0, px 3.0), (px -3.0, px 3.0), (zero, zero), (px 3.0, px -3.0), (px -3.0, px -3.0)] ++ topExitOffsets ++ botExitOffsets ++ rExitOffsets ++ lExitOffsets)
-                              ([statusBadges, actorBadges, roomNo, inventoryBadge, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
+                              ([statusBadges, actorBadges, roomNo, inventoryBadges, upDownExits] ++ topExitImgs ++ botExitImgs ++ rExitImgs ++ lExitImgs) (Just bg)
   = (total, tsrc)
   where
   foldExit :: !Exit !(![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit]) -> (![Exit], ![Exit], ![Exit], ![Exit], ![Exit], ![Exit])
@@ -520,7 +508,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! userStr     = toString userName
   #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
   #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
-  #! inventory   = map (\i -> mkInventoryBadge i (toString i % (0, 1))) carrying
+  #! inventory   = map (\i -> mkInventoryBadge True (toString i % (0, 1))) carrying
   = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
 mkActorBadgeBackground :: !Availability -> Image a
@@ -529,10 +517,10 @@ mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occup
                                                                         NotAvailable -> "black"
                                                                         Busy         -> "orange")}
 
-mkInventoryBadge :: MyObject !String -> Image b
-mkInventoryBadge obj str
+mkInventoryBadge :: Bool !String -> Image b
+mkInventoryBadge portable str
   #! txt = text myFontDef str <@< { fill = toSVGColor "white" }
-  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground True))
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground portable))
 
 mkInventoryBadgeBackground :: Bool -> Image b
 mkInventoryBadgeBackground portable

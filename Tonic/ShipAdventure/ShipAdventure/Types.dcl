@@ -90,6 +90,7 @@ myMap          :: DungeonMap // map of the ship
 myStatusMap    :: RWShared () MyRoomStatusMap    MyRoomStatusMap
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myActorMap     :: RWShared () MyRoomActorMap     MyRoomActorMap
+myNetwork      :: RWShared () Network Network
 
 statusInRoomShare    :: RWShared RoomNumber RoomStatus RoomStatus
 inventoryInRoomShare :: RWShared RoomNumber (IntMap MyObject) (IntMap MyObject)
@@ -115,7 +116,7 @@ resetDetector 	:: !Detector -> Detector
 showMap 			:: Task MapClick
 setRoomDetectors 	:: Task ()
 
-roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
+roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Network !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
 
 cutCable :: RoomNumber CableId Network -> Network
 

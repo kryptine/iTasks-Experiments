@@ -38,12 +38,13 @@ actorWithInstructions :: User -> Task ()
 actorWithInstructions user
   # actor = newActor user
   =           get myActorMap
-  >>= \mam -> case findUser actor.userName mam of
+  >>= \mam -> get myNetwork
+  >>= \nw  -> case findUser actor.userName mam of
                 Nothing
                   =           enterInformation "Which room do you want to start in?" []
                   >>= \loc -> addLog user "" ("Entered the building starting in room " <+++ loc)
-                  >>|         addActorToMap mkRoom actor loc myStatusMap myActorMap myInventoryMap myMap
-                Just (_, me) = moveAround mkRoom me noTask myStatusMap myActorMap myInventoryMap myMap @! ()
+                  >>|         addActorToMap (mkRoom nw) actor loc myStatusMap myActorMap myInventoryMap myMap
+                Just (_, me) = moveAround (mkRoom nw) me noTask myStatusMap myActorMap myInventoryMap myMap @! ()
   where
   newActor user
     = {userName = user, carrying = [], actorStatus = {occupied = Available}}
@@ -144,7 +145,8 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
                         (MyActor Room MyRoomStatusMap MyRoomActorMap MyRoomInventoryMap DungeonMap -> Task (Maybe (Task (Maybe String))))
                      -> Task ()
   handleWhileWalking actor title priority task
-    =           (((actor.userName, title) @: (              moveAround mkRoom actor (Just task) myStatusMap myActorMap myInventoryMap myMap
+    =           get myNetwork
+    >>= \nw ->  (((actor.userName, title) @: (              moveAround (mkRoom nw) actor (Just task) myStatusMap myActorMap myInventoryMap myMap
                                              >>= \mbTask -> case mbTask of
                                                               Just t -> t
                                                               _      -> viewInformation "Error" [] "handleWhileWalking (1)" @! Nothing
@@ -337,6 +339,6 @@ findClosest myLoc targetLoc objectType statusMap inventoryMap exitLocks dungeonM
             [x:_] -> Just (obj, cost, fromExit x)
       _ = Nothing
 
-mkRoom :: MyMkRoom
-mkRoom = \statusMap actorMap invMap exitLocks room -> viewInformation "Room Status" [imageView (\x -> (x, NoMapClick)) (\_ -> roomImage exitLocks invMap statusMap actorMap True (Just room)) (\_ _ -> Nothing)] ()
+mkRoom :: !Network -> MyMkRoom
+mkRoom network = \statusMap actorMap invMap exitLocks room -> viewInformation "Room Status" [imageView (\x -> (x, NoMapClick)) (\_ -> roomImage exitLocks invMap statusMap actorMap network True (Just room)) (\_ _ -> Nothing)] ()
 
