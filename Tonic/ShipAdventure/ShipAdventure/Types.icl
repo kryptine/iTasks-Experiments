@@ -90,7 +90,7 @@ manageDevices kitchen
                   ]
   | otherwise = viewDevices
   where
-  viewDevices = (viewSharedInformation "Disabled devices" [ViewWith disabledDevices] myNetwork
+  viewDevices = (viewSharedInformation "Disabled devices" [ViewWith (map toPPDevice o allDisabledDevices)] myNetwork
                  -&&-
                  viewSharedInformation "Device network" [ViewWith ppNetwork] myNetwork
                 ) @! ()
@@ -103,28 +103,53 @@ manageDevices kitchen
                     \\ (roomNo, devices`) <- 'DIS'.toList network.devices
                     ]
                   )
-  disabledDevices network = [  map toPPDevice (devicesForCable cable network)
-                            \\ cable <- 'DIS'.elems network.cables
-                            |  not (isOperational cable.cableId network.cableMapping)
-                            ]
-    where
-    devicesForCable :: Cable Network -> [Device]
-    devicesForCable cable=:{cableId} {cableMapping, devices}
-      = [  device
-        \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
-        ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
-        |  requiresCable cable device
-        ]
-      where
-      // TODO Take resource quantity and redundancy into account
-      requiresCable { Cable | cableType} device = isJust ('DM'.get cableType device.Device.deviceType.DeviceType.requires)
-
   mkCableDesc roomNo {Cable | cableId, description}
     = "'" +++ description +++ " " +++ toString cableId +++ "' in room " +++ toString roomNo
   cutCableTask roomNo cable
     = upd (cutCable roomNo cable.cableId) myNetwork >>| manageDevices kitchen
   patchCableTask roomNo cable
     = upd (patchCable roomNo cable.cableId) myNetwork >>| manageDevices kitchen
+
+allDisabledDevices :: !Network -> [Device]
+allDisabledDevices network = flatten [  devicesForCable cable network
+                                     \\ cable <- 'DIS'.elems network.cables
+                                     |  not (isOperational cable.cableId network.cableMapping)
+                                     ]
+
+// TODO Make more efficient
+deviceIsDisabled :: !RoomNumber !Device !Network -> Bool
+deviceIsDisabled roomNo device network
+  # disabledDevs = disabledDevicesForRoom roomNo network
+  = not (isEmpty [0 \\ dev <- disabledDevs | dev.Device.deviceId == device.Device.deviceId])
+
+disabledDevicesForRoom :: !RoomNumber !Network -> [Device]
+disabledDevicesForRoom roomNo network = flatten [  devicesForCableInRoom roomNo cable network
+                                                \\ cable <- 'DIS'.elems network.cables
+                                                |  not (isOperational cable.cableId network.cableMapping)
+                                                ]
+
+devicesForCable :: Cable Network -> [Device]
+devicesForCable cable=:{cableId} {cableMapping, devices}
+  = [  device
+    \\ (_, roomNo) <- fromMaybe [] ('DIS'.get cableId cableMapping)
+    ,  device      <- fromMaybe [] ('DIS'.get roomNo devices)
+    |  requiresCable cable device
+    ]
+  where
+  // TODO Take resource quantity and redundancy into account
+  requiresCable { Cable | cableType} device = isJust ('DM'.get cableType device.Device.deviceType.DeviceType.requires)
+
+devicesForCableInRoom :: RoomNumber Cable Network -> [Device]
+devicesForCableInRoom roomNo cable=:{cableId} {cableMapping, devices}
+  = [  device
+    \\ (_, roomNo`) <- fromMaybe [] ('DIS'.get cableId cableMapping)
+    ,  device       <- fromMaybe [] ('DIS'.get roomNo` devices)
+    |  roomNo == roomNo` && requiresCable cable device
+    ]
+  where
+  // TODO Take resource quantity and redundancy into account
+  requiresCable { Cable | cableType} device = isJust ('DM'.get cableType device.Device.deviceType.DeviceType.requires)
+
 
 :: PPDevice =
   { description :: String
@@ -373,8 +398,8 @@ mapImage mngmnt m (((((exitLocks, inventoryMap), statusMap), actorMap), network)
                       , (mkActorBadgeBackground Available,             "Available person")
                       , (mkActorBadgeBackground NotAvailable,          "Unavailable person")
                       , (mkActorBadgeBackground Busy,                  "Busy person")
-                      , (mkInventoryBadgeBackground True,              "Portable object")
-                      , (mkInventoryBadgeBackground False,             "Non-portable object")
+                      , (mkInventoryBadgeBackground False True,        "Portable object")
+                      , (mkInventoryBadgeBackground False False,       "Non-portable object")
                       , (mkUpDown 0 (Up 0) 'DM'.newMap,                "Staircase up")
                       , (mkUpDown 0 (Down 0) 'DM'.newMap,              "Staircase down")
                       ]
@@ -430,8 +455,8 @@ roomImage` inventoryMap statusMap actorMap network mngmnt zoomed exitLocks room=
                          Just inv -> 'DIS'.elems inv
                          _        -> []
   #! devices         = fromMaybe [] ('DIS'.get number network.devices)
-  #! inventoryBadges = map (\i -> scale multiplier multiplier (mkInventoryBadge True (toString i % (0, 1)))) inventory
-  #! deviceBadges    = map (\i -> scale multiplier multiplier (mkInventoryBadge False (toString i % (0, 1)))) devices
+  #! inventoryBadges = map (\i -> scale multiplier multiplier (mkInventoryBadge False True (toString i % (0, 1)))) inventory
+  #! deviceBadges    = map (\i -> scale multiplier multiplier (mkInventoryBadge (deviceIsDisabled number i network) False (toString i % (0, 1)))) devices
   #! allBadges       = inventoryBadges ++ deviceBadges
   #! inventoryBadges = if (length allBadges > 0)
                          (beside (repeat AtMiddleY) [] allBadges Nothing)
@@ -508,7 +533,7 @@ mkActorBadge {actorStatus = {occupied}, userName, carrying}
   #! userStr     = toString userName
   #! userInitial = text myFontDef (userStr % (0,0)) <@< { fill = toSVGColor "white" }
   #! actorBadge  = overlay [(AtMiddleX, AtMiddleY)] [] [userInitial] (Just actorBadge)
-  #! inventory   = map (\i -> mkInventoryBadge True (toString i % (0, 1))) carrying
+  #! inventory   = map (\i -> mkInventoryBadge False True (toString i % (0, 1))) carrying
   = above (repeat AtMiddleX) [] [actorBadge : inventory] Nothing
 
 mkActorBadgeBackground :: !Availability -> Image a
@@ -517,14 +542,16 @@ mkActorBadgeBackground occupied = badgeImage <@< { fill = toSVGColor (case occup
                                                                         NotAvailable -> "black"
                                                                         Busy         -> "orange")}
 
-mkInventoryBadge :: Bool !String -> Image b
-mkInventoryBadge portable str
+mkInventoryBadge :: Bool Bool !String -> Image b
+mkInventoryBadge disabled portable str
   #! txt = text myFontDef str <@< { fill = toSVGColor "white" }
-  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground portable))
+  = overlay [(AtMiddleX, AtMiddleY)] [] [txt] (Just (mkInventoryBadgeBackground disabled portable))
 
-mkInventoryBadgeBackground :: Bool -> Image b
-mkInventoryBadgeBackground portable
+mkInventoryBadgeBackground :: Bool Bool -> Image b
+mkInventoryBadgeBackground disabled portable
   = wideBadgeImage <@< { fill = toSVGColor (if portable "BlueViolet" "purple") }
+                   <@< { stroke = toSVGColor (if disabled "red" "black") }
+                   <@< { strokewidth = px (if disabled 2.0 1.0) }
 
 badgeImage :: Image a
 badgeImage = rect (px 11.0) (px 11.0) <@< { stroke = toSVGColor "black" }
