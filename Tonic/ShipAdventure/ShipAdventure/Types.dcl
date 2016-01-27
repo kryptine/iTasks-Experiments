@@ -14,64 +14,70 @@ import GenLexOrd
 
 :: MapClick     = NoMapClick
                 | SelectRoom RoomNumber
-                | ToggleAlarm RoomNumber Detector
+                | SetRoomStatus RoomNumber RoomStatus
                 | ToggleDoor RoomNumber Exit
 
-:: RoomStatus 	:==	[Detector] 
-:: Detector		= 	FireDetector Bool 
-				| 	SmokeDetector Bool
-                | 	FloodDetector Bool
+:: RoomStatus   =   NormalStatus
+                |   HasSomeWater
+                |   IsFlooded
+                |   HasSmoke
+                |   HasSmallFire
+                |   HasMediumFire
+                |   HasBigFire
 
-:: ObjectType	= 	FireExtinguisher
-				| 	FireBlanket
-				| 	Plug
+:: ObjectType   =   FireExtinguisher
+                |   FireBlanket
+                |   Plug
 
-:: ActorStatus	= 	{ occupied	:: Availability
-					}
-:: Availability	=	Available | NotAvailable | Busy  
+:: ActorStatus  =   { occupied :: Availability
+                    }
+:: Availability =   Available | NotAvailable | Busy
 
-:: Priority		=	Low | Normal | High | Highest
+:: Priority     =   Low | Normal | High | Highest
 
 // logical devices
 
 :: DeviceType =
-  { kind		    :: 	DeviceKind
-  , requires        :: 	Map CableType Capacity
-  , produces        :: 	Map CableType Capacity
+  { kind            ::  DeviceKind
+  , requires        ::  Map CableType Capacity
+  , produces        ::  Map CableType Capacity
   }
-:: DeviceKind		=	Radar
-					| 	PowerGenerator
-					| 	CoolingPump
-					| 	Gun
-:: CableType 		= 	PowerCable | CoolingPipe | DataCable
-:: Capacity 		:== Int
+:: DeviceKind       =   Radar
+                    |   PowerGenerator
+                    |   CoolingPump
+                    |   Gun
+                    |   SmokeDetector
+                    |   HeatSensor
+                    |   WaterSensor
+:: CableType        =   PowerCable | CoolingPipe | DataCable
+:: Capacity         :== Int
 
-// physical devices 
+// physical devices
 
 :: Network =
-  { devices      	:: IntMap [Device]     					// [RoomNumber |-> Devices]
-  , cables       	:: IntMap Cable        					// [CableId |-> Cable]
-  , cableMapping 	:: IntMap [(Operational, RoomNumber)] 	// [CableId |-> RoomNumbers]
+  { devices         ::  IntMap [Device]                      // [RoomNumber |-> Devices]
+  , cables          ::  IntMap Cable                         // [CableId |-> Cable]
+  , cableMapping    ::  IntMap [(Operational, RoomNumber)]   // [CableId |-> RoomNumbers]
   }
 :: Device =
-  { description		::	String
-  , deviceType		::	DeviceType
-  , deviceId		::  DeviceId
-  , inCables 		:: 	[CableId]
-  , outCables 		:: 	[CableId]
+  { description     ::  String
+  , deviceType      ::  DeviceType
+  , deviceId        ::  DeviceId
+  , inCables        ::  [CableId]
+  , outCables       ::  [CableId]
   }
-:: DeviceId			:== Int
-:: CableId 			:== Int
-:: Cable = 													// Edge
-  { description 	:: String
-  , cableId     	:: CableId
-  , capacity    	:: Capacity
-  , cableType   	:: CableType
+:: DeviceId         :== Int
+:: CableId          :== Int
+:: Cable =                                                  // Edge
+  { description     :: String
+  , cableId         :: CableId
+  , capacity        :: Capacity
+  , cableType       :: CableType
   }
 :: Operational :== Bool
 
 derive gLexOrd CableType
-derive class iTask Detector, ObjectType, ActorStatus, Availability, DeviceType
+derive class iTask ObjectType, ActorStatus, Availability, DeviceType, RoomStatus
 derive class iTask Cable, Priority, MapClick, Network, Device, CableType, DeviceKind
 
 instance ==       ObjectType
@@ -82,7 +88,7 @@ instance == CableType
 
 instance toString ObjectType
 instance toString Exit
-instance toString Detector
+instance toString RoomStatus
 
 // shared stores:
 
@@ -96,20 +102,12 @@ statusInRoomShare    :: RWShared RoomNumber RoomStatus RoomStatus
 inventoryInRoomShare :: RWShared RoomNumber (IntMap MyObject) (IntMap MyObject)
 actorsInRoomShare    :: RWShared RoomNumber [MyActor] [MyActor]
 
-allActiveAlarms    :: ReadOnlyShared [(RoomNumber, Detector)]
+allActiveAlarms    :: ReadOnlyShared [(RoomNumber, RoomStatus)]
 allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
 
 // setting and resetting of the detection systems:
 
-setAlarm 		:: User (RoomNumber,Detector) Bool (Shared MyRoomStatusMap) -> Task ()
-
-
-isHigh 			:: !Detector -> Bool
-updDetector 	:: !(Detector -> Detector) !Detector !RoomStatus -> RoomStatus
-toggleDetector 	:: !Detector -> Detector
-setDetector 	:: !Detector -> Detector
-resetDetector 	:: !Detector -> Detector
-
+setAlarm 		:: User (RoomNumber, RoomStatus) (Shared MyRoomStatusMap) -> Task ()
 
 // making images from a map
 
@@ -122,3 +120,9 @@ cutCable :: RoomNumber CableId Network -> Network
 
 patchCable :: RoomNumber CableId Network -> Network
 manageDevices :: Bool -> Task ()
+
+hasFire :: !RoomStatus -> Bool
+
+hasSmoke :: !RoomStatus -> Bool
+
+hasWater :: !RoomStatus -> Bool

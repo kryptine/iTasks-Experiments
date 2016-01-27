@@ -18,7 +18,7 @@ from Adventure.Logging import addLog
 import ShipAdventure.PathFinding
 
 derive gLexOrd CableType
-derive class iTask Detector, ObjectType, ActorStatus, Availability, DeviceType
+derive class iTask ObjectType, ActorStatus, Availability, DeviceType, RoomStatus
 derive class iTask Cable, Priority, MapClick, Network, Device, CableType, DeviceKind
 
 // std overloading instances
@@ -33,13 +33,18 @@ instance toString ObjectType where
 
 instance toString Exit where toString exit = toSingleLineText exit
 
-instance toString Detector
-where toString (FireDetector _)  = "Fire Alarm"
-	  toString (SmokeDetector _) = "Smoke Alarm"
-	  toString (FloodDetector _) = "Flood Alarm"
-
 instance toString Device
 where toString {Device | description} = description
+
+instance toString RoomStatus where
+  toString NormalStatus  = "NormalStatus"
+  toString HasSomeWater  = "HasSomeWater"
+  toString IsFlooded     = "IsFlooded"
+  toString HasSmoke      = "HasSmoke"
+  toString HasSmallFire  = "HasSmallFire"
+  toString HasMediumFire = "HasMediumFire"
+  toString HasBigFire    = "HasBigFire"
+
 
 instance < CableType where
   (<) l r = case l =?= r of
@@ -56,7 +61,7 @@ myStatusMap :: RWShared () MyRoomStatusMap MyRoomStatusMap
 myStatusMap = sharedStore "myStatusMap" 'DIS'.newMap
 
 statusInRoomShare :: RWShared RoomNumber RoomStatus RoomStatus
-statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just [])
+statusInRoomShare = intMapLens "statusInRoomShare" myStatusMap (Just NormalStatus)
 
 myInventoryMap :: RWShared () MyRoomInventoryMap MyRoomInventoryMap
 myInventoryMap = sharedStore "myInventoryMap" ('DIS'.fromList invs)
@@ -206,37 +211,99 @@ gun            = { DeviceType
                  , produces = 'DM'.fromList []
                  }
 
+smokeDetector :: DeviceType
+smokeDetector  = { DeviceType
+                 | kind     = SmokeDetector
+                 , requires = 'DM'.fromList []
+                 , produces = 'DM'.fromList []
+                 }
+
+heatSensor :: DeviceType
+heatSensor     = { DeviceType
+                 | kind     = HeatSensor
+                 , requires = 'DM'.fromList []
+                 , produces = 'DM'.fromList []
+                 }
+
+waterSensor :: DeviceType
+waterSensor    = { DeviceType
+                 | kind     = WaterSensor
+                 , requires = 'DM'.fromList []
+                 , produces = 'DM'.fromList []
+                 }
+
+mkAllSensors sd hs ws
+  = [ { Device
+      | description = "Smoke detector " +++ toString sd
+      , deviceType  = smokeDetector
+      , deviceId    = sd
+      , inCables    = []
+      , outCables   = []
+      }
+    , { Device
+      | description = "Heat sensor " +++ toString hs
+      , deviceType  = heatSensor
+      , deviceId    = hs
+      , inCables    = []
+      , outCables   = []
+      }
+    , { Device
+      | description = "Water sensor " +++ toString ws
+      , deviceType  = waterSensor
+      , deviceId    = ws
+      , inCables    = []
+      , outCables   = []
+      }
+    ]
+
 // my physical mapping of the devices in a network
 
 myNetwork :: RWShared () Network Network
 myNetwork = sharedStore "myNetwork"
   { Network
-  | devices = 'DIS'.fromList [ (1, [{ Device // Radar
-                                    | description	= "Radar"
-                                    , deviceType	= radarDevice
-                                    , deviceId		= 42
-                                    , inCables		= [1]
-                                    , outCables		= []
-                                    }
-                                   ])
-                             , (5, [{ Device // Power gen
-                                    | description	= "Main Power Generator"
-                                    , deviceType	= powerGenerator
-                                    , deviceId      = 24
-                                    , inCables		= []
-                                    , outCables		= [1, 2]
+  | devices = 'DIS'.fromList [ (1,  [{ Device // Radar
+                                     | description = "Radar"
+                                     , deviceType  = radarDevice
+                                     , deviceId    = 101
+                                     , inCables    = [1]
+                                     , outCables   = []
                                      }
-                                   ])
-                             , (9, [{ Device // Gun
-                                    | description	= "Forward Gun"
-                                    , deviceType	= gun
-                                    , deviceId      = 64
-                                    , inCables 		= [2]
-                                    , outCables		= []
-                                    }
-                                   ])
+                                    ] ++ mkAllSensors 1 2 3)
+                             , (2,  mkAllSensors 4 5 6)
+                             , (3,  mkAllSensors 7 8 9)
+                             , (4,  mkAllSensors 10 11 12)
+                             , (5,  [{ Device // Power gen
+                                     | description = "Main Power Generator"
+                                     , deviceType  = powerGenerator
+                                     , deviceId    = 102
+                                     , inCables    = []
+                                     , outCables   = [1, 2]
+                                     }
+                                    ] ++ mkAllSensors 13 14 15)
+                             , (6,  mkAllSensors 16 17 18)
+                             , (7,  mkAllSensors 19 20 21)
+                             , (8,  mkAllSensors 22 23 24)
+                             , (9,  [{ Device // Gun
+                                     | description = "Forward Gun"
+                                     , deviceType  = gun
+                                     , deviceId    = 103
+                                     , inCables    = [2]
+                                     , outCables   = []
+                                     }
+                                    ] ++ mkAllSensors 25 26 27)
+                             , (10, mkAllSensors 28 29 30)
+                             , (11, mkAllSensors 31 32 33)
+                             , (12, mkAllSensors 34 35 36)
+                             , (13, mkAllSensors 37 38 39)
+                             , (14, mkAllSensors 40 41 42)
+                             , (15, mkAllSensors 43 44 45)
+                             , (16, mkAllSensors 46 47 48)
+                             , (17, mkAllSensors 49 50 51)
+                             , (18, mkAllSensors 52 53 54)
+                             , (19, mkAllSensors 55 56 57)
+                             , (20, mkAllSensors 58 59 60)
                              ]
-	,cables = 'DIS'.fromList [ (1, { Cable
+  , cables = 'DIS'.fromList [ (1, { Cable
                                   | cableId     = 1
                                   , description = "Radar power cable"
                                   , capacity    = 1
@@ -283,13 +350,12 @@ allAvailableActors
                          , actor <- actors
                          | actor.actorStatus.occupied === Available]
 
-allActiveAlarms :: ReadOnlyShared [(RoomNumber, Detector)]
+allActiveAlarms :: ReadOnlyShared [(RoomNumber, RoomStatus)]
 allActiveAlarms
   = toReadOnly (sdsProject (SDSLensRead readAlarms) SDSNoWrite myStatusMap)
 where
-    readAlarms statusMap = Ok [ (number,detector) \\ (number,detectors) <- 'DIS'.toList statusMap
-                              , detector <- detectors
-                              | isHigh detector]
+    readAlarms statusMap = Ok [ (number, status) \\ (number, status) <- 'DIS'.toList statusMap
+                              | isHigh status]
 
 // detectors setting
 
@@ -299,37 +365,33 @@ setRoomDetectors :: Task ()
 setRoomDetectors 
 	= ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
       >>* [OnValue (\tv -> case tv of
-                             Value (ToggleAlarm selRoom d)   _ -> Just (updRoomStatus selRoom (updDetector toggleDetector d) myStatusMap >>| setRoomDetectors)
+                             Value (SetRoomStatus selRoom st) _ -> Just (updRoomStatus selRoom (const st) myStatusMap >>| setRoomDetectors)
                              Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
                              _ -> Nothing
                    )])
       -||
       manageDevices True <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen
 
-setAlarm :: User (RoomNumber,Detector) Bool (Shared MyRoomStatusMap) -> Task ()
-setAlarm user (alarmLoc,detector) bool shStatusMap
-	= 		updRoomStatus alarmLoc (updDetector (if bool setDetector resetDetector) detector) shStatusMap
-	>>|		addLog user ""  ("Resets " <+++ detector <+++ " in Room " <+++ alarmLoc <+++ " to False.") 
+setAlarm :: User (RoomNumber, RoomStatus) (Shared MyRoomStatusMap) -> Task ()
+setAlarm user (alarmLoc, status) shStatusMap
+  =   updRoomStatus alarmLoc (const status) shStatusMap
+  >>| addLog user ""  ("Resets " <+++ status <+++ " in Room " <+++ alarmLoc <+++ " to False.") 
 
-//
+hasFire :: !RoomStatus -> Bool
+hasFire HasSmallFire  = True
+hasFire HasMediumFire = True
+hasFire HasBigFire    = True
+hasFire _             = False
 
-updDetector :: !(Detector -> Detector) !Detector !RoomStatus -> RoomStatus
-updDetector f d r = [if (d =+?= d`) (f d`) d` \\ d` <- r]
+hasSmoke :: !RoomStatus -> Bool
+hasSmoke HasSmoke = True
+hasSmoke _        = False
 
-toggleDetector :: !Detector -> Detector
-toggleDetector (FireDetector  b) = FireDetector  (not b)
-toggleDetector (SmokeDetector b) = SmokeDetector (not b)
-toggleDetector (FloodDetector b) = FloodDetector (not b)
+hasWater :: !RoomStatus -> Bool
+hasWater HasSomeWater = True
+hasWater IsFlooded    = True
+hasWater _            = False
 
-setDetector :: !Detector -> Detector
-setDetector (FireDetector  b) = FireDetector  True
-setDetector (SmokeDetector b) = SmokeDetector True
-setDetector (FloodDetector b) = FloodDetector True
-
-resetDetector :: !Detector -> Detector
-resetDetector (FireDetector  b) = FireDetector  False
-resetDetector (SmokeDetector b) = SmokeDetector False
-resetDetector (FloodDetector b) = FloodDetector False
 
 // general map viewing
 
@@ -392,9 +454,12 @@ mapImage :: !Bool !DungeonMap !(!(!(!(!(!RoomExitLockMap, !MyRoomInventoryMap), 
 mapImage mngmnt m (((((exitLocks, inventoryMap), statusMap), actorMap), network), _) tsrc
   #! (floors, tsrc) = mapSt (floorImage exitLocks inventoryMap statusMap actorMap network mngmnt) (zip2 m (reverse [0..length m])) tsrc
   #! allFloors      = beside (repeat AtMiddleY) [] ('DL'.intersperse (empty (px 8.0) (px 8.0)) floors) Nothing
-  #! legendElems    = [ (mkStatusBadgeBackground (FireDetector True),  "Fire detected")
-                      , (mkStatusBadgeBackground (SmokeDetector True), "Smoke detected")
-                      , (mkStatusBadgeBackground (FloodDetector True), "Flood detected")
+  #! legendElems    = [ (mkStatusBadgeBackground HasSmoke,             "Smoke detected")
+                      , (mkStatusBadgeBackground HasSmallFire,         "Small fire detected")
+                      , (mkStatusBadgeBackground HasMediumFire,        "Medium fire detected")
+                      , (mkStatusBadgeBackground HasBigFire,           "Big fire detected")
+                      , (mkStatusBadgeBackground HasSomeWater,         "Some water detected")
+                      , (mkStatusBadgeBackground IsFlooded,            "Flood detected")
                       , (mkActorBadgeBackground Available,             "Available person")
                       , (mkActorBadgeBackground NotAvailable,          "Unavailable person")
                       , (mkActorBadgeBackground Busy,                  "Busy person")
@@ -427,6 +492,12 @@ roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorM
 roomImage exitLocks inventoryMap statusMap actorMap network zoomed (Just room) tsrc = fst (roomImage` inventoryMap statusMap actorMap network False zoomed exitLocks room tsrc)
 roomImage _ _ _ _ _ _ _ _                                                           = empty zero zero
 
+isDetector :: !DeviceKind -> Bool
+isDetector SmokeDetector = True
+isDetector HeatSensor    = True
+isDetector WaterSensor   = True
+isDetector _             = False
+
 roomImage` :: !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Network !Bool !Bool !RoomExitLockMap !Room !*TagSource -> *(!Image (a, MapClick), !*TagSource)
 roomImage` inventoryMap statusMap actorMap network mngmnt zoomed exitLocks room=:{number, exits} tsrc
   #! (northEs, eastEs, southEs, westEs, upEs, downEs) = foldr foldExit ([], [], [], [], [], []) exits
@@ -442,9 +513,9 @@ roomImage` inventoryMap statusMap actorMap network mngmnt zoomed exitLocks room=
   #! bg              = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
   #! bg              = bg <@< { onclick = onClick (SelectRoom number), local = False }
   #! roomStatus      = case 'DIS'.get number statusMap of
-                         Just roomStatus = roomStatus
+                         Just roomStatus = [roomStatus]
                          _
-                         | mngmnt    = [FireDetector False, SmokeDetector False, FloodDetector False] // TODO This isnt really correct yet. When we get Just, other buttons will disappear. We need to fill the shares to make this all work.
+                         | mngmnt    = [HasSomeWater, HasSmoke, HasSmallFire]
                          | otherwise = []
   #! statusBadges    = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
   #! actors          = case 'DIS'.get number actorMap of
@@ -455,6 +526,7 @@ roomImage` inventoryMap statusMap actorMap network mngmnt zoomed exitLocks room=
                          Just inv -> 'DIS'.elems inv
                          _        -> []
   #! devices         = fromMaybe [] ('DIS'.get number network.devices)
+  #! devices         = [el \\ el <- devices | not (isDetector el.Device.deviceType.DeviceType.kind) ]
   #! inventoryBadges = map (\i -> scale multiplier multiplier (mkInventoryBadge False True (toString i % (0, 1)))) inventory
   #! deviceBadges    = map (\i -> scale multiplier multiplier (mkInventoryBadge (deviceIsDisabled number i network) False (toString i % (0, 1)))) devices
   #! allBadges       = inventoryBadges ++ deviceBadges
@@ -511,21 +583,22 @@ mkUpDown roomNo e exitLocks
            _      -> [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
   = polygon Nothing ps <@< { opacity = if l 0.3 1.0 }
 
-mkStatusBadge :: Int !Bool !Real !Detector ![Image (a, MapClick)] -> [Image (a, MapClick)]
+mkStatusBadge :: Int !Bool !Real !RoomStatus ![Image (a, MapClick)] -> [Image (a, MapClick)]
 mkStatusBadge roomNo mngmnt badgeMult d acc
   #! high = isHigh d
   | high || mngmnt
     #! img = scale badgeMult badgeMult (mkStatusBadgeBackground d) <@< { opacity = if high 1.0 0.3 }
     #! img = if mngmnt
-               (img <@< { onclick = onClick (ToggleAlarm roomNo d), local = False })
+               (img <@< { onclick = onClick (SetRoomStatus roomNo d), local = False })
                img
     = [img : acc]
   | otherwise = acc
 
-mkStatusBadgeBackground :: !Detector -> Image a
-mkStatusBadgeBackground (FireDetector  _) = badgeImage <@< { fill = toSVGColor "red"  }
-mkStatusBadgeBackground (SmokeDetector _) = badgeImage <@< { fill = toSVGColor "grey" }
-mkStatusBadgeBackground (FloodDetector _) = badgeImage <@< { fill = toSVGColor "lightblue" }
+mkStatusBadgeBackground :: !RoomStatus -> Image a
+mkStatusBadgeBackground status
+  | hasFire status  = badgeImage <@< { fill = toSVGColor "red"  }
+  | hasSmoke status = badgeImage <@< { fill = toSVGColor "grey" }
+  | otherwise       = badgeImage <@< { fill = toSVGColor "lightblue" }
 
 mkActorBadge :: !MyActor -> Image a
 mkActorBadge {actorStatus = {occupied}, userName, carrying}
@@ -562,13 +635,8 @@ wideBadgeImage = rect (px 16.0) (px 11.0) <@< { stroke = toSVGColor "black" }
                                           <@< { strokewidth = px 1.0 }
 // ------------
 
-isHigh :: !Detector -> Bool
-isHigh (FireDetector  b) = b
-isHigh (SmokeDetector b) = b
-isHigh (FloodDetector b) = b
-
-toggle b = not b
-
+isHigh :: !RoomStatus -> Bool
+isHigh status = hasFire status || hasSmoke status || hasWater status
 
 // should be in the library somewhere
 

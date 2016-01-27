@@ -16,9 +16,12 @@ smartShipPathToClosestObject kind actorLoc targetLoc statusMap inventoryMap exit
 shipShortestPath :: RoomNumber RoomNumber MyRoomStatusMap RoomExitLockMap DungeonMap -> Maybe ([Exit], Distance)
 shipShortestPath startRoomNumber endRoomNumber statusMap exitLocks allRooms = shortestPath cost startRoomNumber endRoomNumber statusMap exitLocks allRooms
   where
-  cost detectors = 1 + sum (map detectorCost detectors)
-  detectorCost (FireDetector  True) = 1000
-  detectorCost (SmokeDetector True) = 250
-  detectorCost (FloodDetector True) = 1000
-  detectorCost _                    = 0
+  cost status = 1 + statusCost status
+  statusCost HasSomeWater  = 500
+  statusCost IsFlooded     = 1000
+  statusCost HasSmoke      = 400
+  statusCost HasSmallFire  = 500
+  statusCost HasMediumFire = 750
+  statusCost HasBigFire    = 1000
+  statusCost _             = 0
 

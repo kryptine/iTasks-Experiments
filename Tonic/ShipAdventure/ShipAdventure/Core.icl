@@ -15,7 +15,7 @@ import ShipAdventure.PathFinding, ShipAdventure.Util
 
 // the next function should be placed in the library somewhere
 
-mkTable :: [String]  ![a] -> Table | gText{|*|} a
+mkTable :: [String] ![a] -> Table | gText{|*|} a
 mkTable	headers a = Table headers (map row a) Nothing
   where
   row x = [Text cell \\ cell <- gText{|*|} AsRow (Just x)]
@@ -95,36 +95,36 @@ giveInstructions =
 
   showAlarm (alarmLoc, detector) = "Room " <+++ alarmLoc <+++ " : " <+++ toString detector <+++ "!"
 
-  selectSomeOneToHandle :: (RoomNumber, Detector) -> Task (Int, MyActor)
+  selectSomeOneToHandle :: (RoomNumber, RoomStatus) -> Task (Int, MyActor)
   selectSomeOneToHandle (number, detector)
     = enterChoiceWithShared ("Who should handle: " <+++ showAlarm (number, detector))
         [ChooseWith (ChooseFromGrid (\(roomNumber,actor) -> (roomNumber, actor.userName, actor.actorStatus)))] allAvailableActors
 
-  viewRelativeStatus :: (RoomNumber,MyActor) (RoomNumber,Detector) -> Task ()
-  viewRelativeStatus (actorLoc, actor) (alarmLoc, FireDetector _)
-      = viewSharedInformation () [ViewWith mkView] (myStatusMap |+| myInventoryMap |+| exitLockShare) @! ()
-      where
-      mkView ((statusMap, inventoryMap), exitLocks)
-        # (_,_,eCost,nrExt, (extLoc, distExt, _))                       = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc statusMap inventoryMap exitLocks myMap
-        # (_,_,bCost,nrFireBlankets, (blanketLoc, distFireBlankets, _)) = smartShipPathToClosestObject FireBlanket      actorLoc alarmLoc statusMap inventoryMap exitLocks myMap
-        # fireDist                                                      = shipShortestPath actorLoc alarmLoc statusMap exitLocks myMap
-        = mkTable [ "Object Description",                                           "Located in Room" ,      "Distance from " <+++ actor.userName, "Route Length"]
-                  [ ("Fire Alarm !! " ,                                             roomToString alarmLoc,   spToDistString2 fireDist,             spToDistString2 fireDist)
-                  , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)",         roomToString extLoc,     roomToString distExt,                 toString eCost)
-                  , ("Closest FireBlanket (" <+++ nrFireBlankets <+++ " in reach)", roomToString blanketLoc, roomToString distFireBlankets,        toString bCost)
-                  ]
-  viewRelativeStatus (actorLoc, actor) (alarmLoc, SmokeDetector _)
-      = viewSharedInformation () [ViewWith mkView] (myStatusMap |+| myInventoryMap |+| exitLockShare) @! ()
-      where
-      mkView ((statusMap, inventoryMap), exitLocks)
-        # distance = shipShortestPath actorLoc alarmLoc statusMap exitLocks myMap
-        = mkTable [ "Object Description", "Located in Room",     "Distance from " <+++ actor.userName, "Route Length"]
-                  [ ("Smoke Alarm !! ",   roomToString alarmLoc, spToDistString2 distance, spToDistString2 distance )
-                  ]
-  viewRelativeStatus (actorLoc, actor) (alarmLoc, FloodDetector _)
-    = viewSharedInformation () [ViewWith mkView] (myStatusMap |+| myInventoryMap |+| exitLockShare) @! ()
+  viewRelativeStatus :: (RoomNumber, MyActor) (RoomNumber, RoomStatus) -> Task ()
+  viewRelativeStatus (actorLoc, actor) (alarmLoc, status)
+    # view = if (hasFire status) mkFireView
+               (if (hasSmoke status) mkSmokeView
+                  (if (hasWater status) mkWaterView
+                     (\_ -> mkTable ["Status"] ["Everything in order"])
+                  )
+               )
+    = viewSharedInformation () [ViewWith view] (myStatusMap |+| myInventoryMap |+| exitLockShare) @! ()
     where
-    mkView ((statusMap, inventoryMap), exitLocks)
+    mkFireView ((statusMap, inventoryMap), exitLocks)
+      # (_,_,eCost,nrExt, (extLoc, distExt, _))                       = smartShipPathToClosestObject FireExtinguisher actorLoc alarmLoc statusMap inventoryMap exitLocks myMap
+      # (_,_,bCost,nrFireBlankets, (blanketLoc, distFireBlankets, _)) = smartShipPathToClosestObject FireBlanket      actorLoc alarmLoc statusMap inventoryMap exitLocks myMap
+      # fireDist                                                      = shipShortestPath actorLoc alarmLoc statusMap exitLocks myMap
+      = mkTable [ "Object Description",                                           "Located in Room" ,      "Distance from " <+++ actor.userName, "Route Length"]
+                [ ("Fire Alarm !! " ,                                             roomToString alarmLoc,   spToDistString2 fireDist,             spToDistString2 fireDist)
+                , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)",         roomToString extLoc,     roomToString distExt,                 toString eCost)
+                , ("Closest FireBlanket (" <+++ nrFireBlankets <+++ " in reach)", roomToString blanketLoc, roomToString distFireBlankets,        toString bCost)
+                ]
+    mkSmokeView ((statusMap, inventoryMap), exitLocks)
+      # distance = shipShortestPath actorLoc alarmLoc statusMap exitLocks myMap
+      = mkTable [ "Object Description", "Located in Room",     "Distance from " <+++ actor.userName, "Route Length"]
+                [ ("Smoke Alarm !! ",   roomToString alarmLoc, spToDistString2 distance, spToDistString2 distance )
+                ]
+    mkWaterView ((statusMap, inventoryMap), exitLocks)
       # (_,_,pCost,nrPlugs, (plugLoc, distPlugs, _)) = smartShipPathToClosestObject Plug actorLoc alarmLoc statusMap inventoryMap exitLocks myMap
       # floodDist                                    = shipShortestPath actorLoc alarmLoc statusMap exitLocks myMap
       = mkTable [ "Object Description",                             "Located in Room",     "Distance from " <+++ actor.userName, "Route Length"]
@@ -159,10 +159,10 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
                   _ -> viewInformation ("Task " <+++ title <+++ " has been cancelled by you") [] ()
     >>|         return ()
 
-  taskToDo :: (RoomNumber,Detector) MyActor Room MyRoomStatusMap MyRoomActorMap MyRoomInventoryMap DungeonMap -> Task (Maybe (Task (Maybe String)))
-  taskToDo (alarmLoc,detector) curActor curRoom statusMap actorMap inventoryMap curMap
+  taskToDo :: (RoomNumber, RoomStatus) MyActor Room MyRoomStatusMap MyRoomActorMap MyRoomInventoryMap DungeonMap -> Task (Maybe (Task (Maybe String)))
+  taskToDo (alarmLoc, status) curActor curRoom statusMap actorMap inventoryMap curMap
     =                 get exitLockShare
-    >>= \exitLocks -> (viewInformation ("Handle " <+++ toString detector <+++ " in Room: " <+++ alarmLoc) []  ()
+    >>= \exitLocks -> (viewInformation ("Handle " <+++ toString status <+++ " in Room: " <+++ alarmLoc) []  ()
                       -||
                       (let path                                                                          = shipShortestPath curRoom.number alarmLoc statusMap exitLocks curMap
                            (_, _, eCost, nrExt,          (extLoc, distExt, dirExt))                      = smartShipPathToClosestObject FireExtinguisher curRoom.number alarmLoc statusMap inventoryMap exitLocks curMap
@@ -170,49 +170,42 @@ handleAlarm (me, (alarmLoc, detector), (actorLoc, actor), priority)
                            (_, _, pCost, nrPlugs,        (plugLoc, distPlugs, dirPlug))                  = smartShipPathToClosestObject Plug curRoom.number alarmLoc statusMap inventoryMap exitLocks curMap
                       in viewInformation "" []
                             (mkTable [ "Object Description",                                     "Located in Room",       "Take Exit",         "Distance from " <+++ curActor.userName, "Route Length"]
-                               [ (toString detector,                                             roomToString alarmLoc,   goto2 path,          spToDistString2 path,                    spToDistString2 path)
+                               [ (toString status,                                             roomToString alarmLoc,   goto2 path,          spToDistString2 path,                    spToDistString2 path)
                                , ("Closest Extinquisher (" <+++ nrExt <+++ " in reach)",         roomToString extLoc,     goto dirExt,         roomToString distExt,                    toString eCost)
                                , ("Closest FireBlanket (" <+++ nrFireBlankets <+++ " in reach)", roomToString blanketLoc, goto dirFireBlanket, roomToString distFireBlankets,           toString bCost)
                                , ("Closest plug (" <+++ nrPlugs <+++ " in reach)",               roomToString plugLoc,    goto dirPlug,        roomToString distPlugs,                  toString pCost)
                                ])) @! ()
-                      >>* [ OnAction (Action "Use Fire Extinguisher" []) (ifCond (mayUseExtinguisher detector) (return (Just useExtinquisher)))
-                          , OnAction (Action "Use FireBlanket" [])       (ifCond (mayUseFireBlanket detector)  (return (Just useFireBlanket)))
-                          , OnAction (Action "Use Plug" [])              (ifCond (mayUsePlug detector)         (return (Just usePlug)))
-                          , OnAction (Action "Smoke Investigated" [])    (ifCond (mayDetectedSmoke detector)   (return (Just smokeReport)))
+                      >>* [ OnAction (Action "Use Fire Extinguisher" []) (ifCond (mayUseExtinguisher status) (return (Just useExtinquisher)))
+                          , OnAction (Action "Use FireBlanket" [])       (ifCond (mayUseFireBlanket status)  (return (Just useFireBlanket)))
+                          , OnAction (Action "Use Plug" [])              (ifCond (mayUsePlug status)         (return (Just usePlug)))
+                          , OnAction (Action "Smoke Investigated" [])    (ifCond (mayDetectedSmoke status)   (return (Just smokeReport)))
                           , OnAction (Action "I give up" [])             (always (return (Just giveUp)))
                           ])
     where
-    mayUseExtinguisher (FireDetector True) = curRoom.number == alarmLoc && isCarrying FireExtinguisher curActor
-    mayUseExtinguisher _                   = False
-
-    mayUseFireBlanket (FireDetector True)  = curRoom.number == alarmLoc && isCarrying FireBlanket curActor
-    mayUseFireBlanket _                    = False
-
-    mayUsePlug (FloodDetector True)        = curRoom.number == alarmLoc && isCarrying Plug curActor
-    mayUsePlug _                           = False
-
-    mayDetectedSmoke (SmokeDetector True)  = curRoom.number == alarmLoc
-    mayDetectedSmoke _                     = False
+    mayUseExtinguisher status = hasFire  status && curRoom.number == alarmLoc && isCarrying FireExtinguisher curActor
+    mayUseFireBlanket  status = hasFire  status && curRoom.number == alarmLoc && isCarrying FireBlanket curActor
+    mayUsePlug         status = hasWater status && curRoom.number == alarmLoc && isCarrying Plug curActor
+    mayDetectedSmoke   status = hasSmoke status && curRoom.number == alarmLoc
 
     useExtinquisher =   useObject alarmLoc (getObjectOfType curActor FireExtinguisher) curActor myActorMap
-                    >>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+                    >>| setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap
                     >>| updStatusOfActor curActor.userName Available
                     >>| viewInformation "Well Done, Fire Extinguished !" [] ()
                     >>| return (Just "Fire Extinguised")
 
     useFireBlanket  =   useObject alarmLoc (getObjectOfType curActor FireBlanket) curActor myActorMap
-                    >>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+                    >>| setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap
                     >>| updStatusOfActor curActor.userName Available
                     >>| viewInformation "Well Done, Fire Extinguished !" [] ()
                     >>| return (Just "Fire Extinguised")
 
     usePlug         =   useObject alarmLoc (getObjectOfType curActor Plug) curActor myActorMap
-                    >>| setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+                    >>| setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap
                     >>| updStatusOfActor curActor.userName Available
                     >>| viewInformation "Well Done, Flooding Stopped !" [] ()
                     >>| return (Just "Flooding Stopped")
 
-    smokeReport     =   setAlarm actor.userName (alarmLoc,detector) False myStatusMap
+    smokeReport     =   setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap
                     >>| updStatusOfActor curActor.userName Available
                     >>| viewInformation "Well Done, Reason of Smoke Detected !" [] ()
                     >>| return (Just "Don't smoke under a smoke detector !!")
@@ -233,68 +226,70 @@ updStatusOfActor user availability
   =   updActorStatus user (\st -> {st & occupied = availability}) myActorMap
   >>| addLog user "" ("Has become " <+++ availability)
 
-scriptDefined :: Detector -> Task Bool
-scriptDefined detector
-  = case detector of
-      (FireDetector   _) -> get handleFireScript  >>= \script -> return (length script > 0)
-      (FloodDetector  _) -> get handleFloodScript >>= \script -> return (length script > 0)
-      (SmokeDetector  _) -> get handleSmokeScript >>= \script -> return (length script > 0)
+scriptDefined :: RoomStatus -> Task Bool
+scriptDefined status
+  | hasFire status  = get handleFireScript  >>= \script -> return (length script > 0)
+  | hasWater status = get handleFloodScript >>= \script -> return (length script > 0)
+  | hasSmoke status = get handleSmokeScript >>= \script -> return (length script > 0)
+  | otherwise       = return False
 
-autoHandleWithScript :: (User, (RoomNumber, Detector), (RoomNumber, MyActor), Priority) -> Task ()
-autoHandleWithScript  (commander,(alarmLoc,detector),(actorLoc,actor),prio)
-  =              case detector of
-                   (FireDetector   _) -> get handleFireScript
-                   (FloodDetector  _) -> get handleFloodScript
-                   (SmokeDetector  _) -> get handleSmokeScript
-  >>= \script -> appendTopLevelTaskPrioFor actor.userName ("Auto script " <+++ toString detector <+++ " in room " <+++ alarmLoc) "High" True
-                 (   updStatusOfActor actor.userName Busy
-                 >>| addLog ("Commander " <+++ commander) actor.userName ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
-                 >>| interperScript (alarmLoc,detector) actor.userName script // perform script (actorLoc,actor)
-                 >>| updStatusOfActor actor.userName Available
-                 >>| addLog actor.userName commander ("Simulation Handling " <+++ toString detector <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
-                 ) @! ()
+autoHandleWithScript :: (User, (RoomNumber, RoomStatus), (RoomNumber, MyActor), Priority) -> Task ()
+autoHandleWithScript (commander, (alarmLoc, status), (actorLoc, actor), prio)
+  | hasFire status  = get handleFireScript  >>= continueWithScript
+  | hasWater status = get handleFloodScript >>= continueWithScript
+  | hasSmoke status = get handleSmokeScript >>= continueWithScript
+  | otherwise       = return ()
+  where
+  continueWithScript script
+    = appendTopLevelTaskPrioFor actor.userName ("Auto script " <+++ toString status <+++ " in room " <+++ alarmLoc) "High" True
+      (   updStatusOfActor actor.userName Busy
+      >>| addLog ("Commander " <+++ commander) actor.userName ("Simulate Handling " <+++ toString status <+++ " detected in " <+++ alarmLoc)
+      >>| interperScript (alarmLoc, status) actor.userName script // perform script (actorLoc,actor)
+      >>| updStatusOfActor actor.userName Available
+      >>| addLog actor.userName commander ("Simulation Handling " <+++ toString status <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
+      ) @! ()
 
 // simulate via auto stuf
 
-autoHandleAlarm commander user (alarmLoc,detector)
-  = appendTopLevelTaskPrioFor user ("Auto handling " <+++ toString detector <+++ " in room " <+++ alarmLoc) "High" True
-      (startSimulation commander user (alarmLoc, detector)) @! ()
+autoHandleAlarm commander user (alarmLoc, status)
+  = appendTopLevelTaskPrioFor user ("Auto handling " <+++ toString status <+++ " in room " <+++ alarmLoc) "High" True
+      (startSimulation commander user (alarmLoc, status)) @! ()
 
-startSimulation :: User User (RoomNumber, Detector) -> Task Bool
-startSimulation commander user (alarmLoc, detector)
+startSimulation :: User User (RoomNumber, RoomStatus) -> Task Bool
+startSimulation commander user (alarmLoc, status)
   =                 updStatusOfActor user Busy
-  >>|               addLog ("Commander " <+++ commander) user ("Simulate Handling " <+++ toString detector <+++ " detected in " <+++ alarmLoc)
+  >>|               addLog ("Commander " <+++ commander) user ("Simulate Handling " <+++ toString status <+++ " detected in " <+++ alarmLoc)
   >>|               get myStatusMap
   >>= \statusMap -> get myActorMap
   >>= \mam       -> get exitLockShare
   >>= \exitLocks -> get myInventoryMap
   >>= \invMap    -> case findUser user mam of
                       Just (myLoc, curActor)
-                        = case findClosestObject myLoc (alarmLoc, detector) statusMap invMap exitLocks myMap of
+                        = case findClosestObject myLoc (alarmLoc, status) statusMap invMap exitLocks myMap of
                             (Nothing, _) = endSimulation False
                             (Just loc, mbObj) = (case mbObj of
-                                                   Nothing  = simulateHandling myLoc alarmLoc detector curActor myStatusMap myMap
-                                                   Just obj = simulateHandlingWithObject myLoc obj loc alarmLoc detector curActor myStatusMap myInventoryMap myMap
+                                                   Nothing  = simulateHandling myLoc alarmLoc status curActor myStatusMap myMap
+                                                   Just obj = simulateHandlingWithObject myLoc obj loc alarmLoc status curActor myStatusMap myInventoryMap myMap
                                                 )
                                                 >>| endSimulation True
                       _ = endSimulation False
   where
   endSimulation ok
     =   updStatusOfActor user Available
-    >>| addLog user commander  ("Simulation Handling " <+++ toString detector <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
+    >>| addLog user commander  ("Simulation Handling " <+++ toString status <+++ " in room " <+++ alarmLoc <+++ " Finished " <+++ if True "Succesfully" "Failed")
     >>| return ok
 
 
-simulateHandling :: RoomNumber RoomNumber Detector MyActor (Shared MyRoomStatusMap) DungeonMap -> Task Bool
-simulateHandling startLoc alarmLoc detector actor myStatusMap dungeonMap
+simulateHandling :: RoomNumber RoomNumber RoomStatus MyActor (Shared MyRoomStatusMap) DungeonMap -> Task Bool
+simulateHandling startLoc alarmLoc status actor myStatusMap dungeonMap
   =                     autoMove startLoc alarmLoc shipShortestPath actor myStatusMap myActorMap dungeonMap
   >>= \targetReached -> if targetReached
-                          (setAlarm actor.userName (alarmLoc, detector) False myStatusMap @! True)
+                          (setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap @! True)
                           (return False)
 
-simulateHandlingWithObject :: RoomNumber MyObject RoomNumber RoomNumber Detector MyActor (Shared MyRoomStatusMap) (Shared MyRoomInventoryMap) DungeonMap
+simulateHandlingWithObject :: RoomNumber MyObject RoomNumber RoomNumber RoomStatus MyActor (Shared MyRoomStatusMap) (Shared MyRoomInventoryMap) DungeonMap
                            -> Task Bool
-simulateHandlingWithObject startLoc object objectLoc alarmLoc detector actor myStatusMap myInventoryMap dungeonMap
+simulateHandlingWithObject startLoc object objectLoc alarmLoc status actor myStatusMap myInventoryMap dungeonMap
   =                     addLog actor.userName "Started Simulation" ("From " <+++ startLoc <+++
                                                                     " to " <+++	alarmLoc <+++
                                                                     " via " <+++ objectLoc <+++
@@ -303,29 +298,29 @@ simulateHandlingWithObject startLoc object objectLoc alarmLoc detector actor myS
   >>= \objectReached -> if objectReached (pickupObject objectLoc object actor myActorMap myInventoryMap
   >>= \objectFound   -> if objectFound   (autoMove objectLoc alarmLoc shipShortestPath actor myStatusMap myActorMap dungeonMap
   >>= \targetReached -> if targetReached (useObject alarmLoc object actor myActorMap
-  >>= \used          -> if used          (setAlarm actor.userName (alarmLoc,detector) False myStatusMap @! True)
+  >>= \used          -> if used          (setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap @! True)
                                          (return False))
                                          (return False))
                                          (return False))
                                          (return False)
 
-findClosestObject :: RoomNumber (RoomNumber, Detector) MyRoomStatusMap MyRoomInventoryMap RoomExitLockMap DungeonMap -> (Maybe RoomNumber, Maybe MyObject)
-findClosestObject  myLoc (alarmLoc, detector) statusMap inventoryMap exitLocks curMap
-  = case detector of
-      (SmokeDetector _) = (Just myLoc, Nothing)
-      (FloodDetector _) = case findClosest myLoc alarmLoc Plug statusMap inventoryMap exitLocks curMap of
-                            Nothing -> (Nothing, Nothing)
-                            Just (obj, _, roomNo)  -> (Just roomNo, Just obj)
-      (FireDetector _)
-      # fireLoc 	= findClosest myLoc alarmLoc FireExtinguisher statusMap inventoryMap exitLocks curMap
-      # blanketLoc 	= findClosest myLoc alarmLoc FireBlanket      statusMap inventoryMap exitLocks curMap
-      = case (fireLoc, blanketLoc) of
-          (Just (obj, _, roomNo), Nothing) -> (Just roomNo, Just obj)
-          (Nothing, Just (obj, _, roomNo)) -> (Just roomNo, Just obj)
-          (Just (obj1, dist1, roomNo1), Just (obj2, dist2, roomNo2))
-            | less dist1 dist2 -> (Just roomNo1, Just obj1)
-            | otherwise        -> (Just roomNo2, Just obj2)
-          _                    -> (Nothing, Nothing)
+findClosestObject :: RoomNumber (RoomNumber, RoomStatus) MyRoomStatusMap MyRoomInventoryMap RoomExitLockMap DungeonMap -> (Maybe RoomNumber, Maybe MyObject)
+findClosestObject  myLoc (alarmLoc, status) statusMap inventoryMap exitLocks curMap
+  | hasSmoke status = (Just myLoc, Nothing)
+  | hasWater status = case findClosest myLoc alarmLoc Plug statusMap inventoryMap exitLocks curMap of
+                        Nothing -> (Nothing, Nothing)
+                        Just (obj, _, roomNo)  -> (Just roomNo, Just obj)
+  | hasFire status
+    # fireLoc    = findClosest myLoc alarmLoc FireExtinguisher statusMap inventoryMap exitLocks curMap
+    # blanketLoc = findClosest myLoc alarmLoc FireBlanket      statusMap inventoryMap exitLocks curMap
+    = case (fireLoc, blanketLoc) of
+        (Just (obj, _, roomNo), Nothing) -> (Just roomNo, Just obj)
+        (Nothing, Just (obj, _, roomNo)) -> (Just roomNo, Just obj)
+        (Just (obj1, dist1, roomNo1), Just (obj2, dist2, roomNo2))
+          | less dist1 dist2 -> (Just roomNo1, Just obj1)
+          | otherwise        -> (Just roomNo2, Just obj2)
+        _                    -> (Nothing, Nothing)
+  | otherwise = (Nothing, Nothing)
   where
   less c1 c2
   | c1 >=0 && c2 >= 0 = c1<c2

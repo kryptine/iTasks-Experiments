@@ -31,22 +31,22 @@ changeSmokeScript = changeScript "Handling Smoke" handleSmokeScript
 
 changeScript :: String (Shared [Script]) -> Task ()
 changeScript prompt script
-	=	viewSharedInformation ("Current Script: " <+++ prompt) [ViewWith (map (\e -> toSingleLineText e))] script
-	>>*	[OnAction (Action "Fine" []) (always (return ()))
-		,OnAction (Action "Change" []) (always (	updateSharedInformation ("Change Script: " <+++ prompt) [] script 
-												>>| changeScript prompt script
-												))
-		]
+  =   viewSharedInformation ("Current Script: " <+++ prompt) [ViewWith (map toSingleLineText)] script
+  >>* [ OnAction (Action "Fine" []) (always (return ()))
+      , OnAction (Action "Change" []) (always (   updateSharedInformation ("Change Script: " <+++ prompt) [] script
+                                              >>| changeScript prompt script
+                                              ))
+      ]
 
 
-interperScript ::  (RoomNumber,Detector) User [Script] -> Task Bool
-interperScript (targetRoom,detector) user script
+interperScript ::  (RoomNumber, RoomStatus) User [Script] -> Task Bool
+interperScript (targetRoom, status) user script
   =                get myActorMap
   >>= \actorMap -> case findUser user actorMap of
                      Just user -> perform script user
                      _         -> return False
   where
-  perform :: [Script] (RoomNumber,MyActor) -> Task Bool
+  perform :: [Script] (RoomNumber, MyActor) -> Task Bool
   perform [] (actorLoc, actor) = return True
 
   perform [MoveTo target:next] (actorLoc,actor)
@@ -77,8 +77,8 @@ interperScript (targetRoom,detector) user script
             =   useObject actorLoc obj actor myActorMap
             >>| perform next (actorLoc,actor)
           _ = perform next (actorLoc,actor)
-  perform [ReSetTargetDetector:next] (actorLoc,actor)	
-    =   setAlarm actor.userName (targetRoom,detector) False myStatusMap
+  perform [ReSetTargetDetector:next] (actorLoc,actor)
+    =   setAlarm actor.userName (targetRoom, NormalStatus) myStatusMap
     >>| perform next (actorLoc,actor)
   perform [If condition script1 script2:next] (actorLoc,actor)
     =              get myInventoryMap

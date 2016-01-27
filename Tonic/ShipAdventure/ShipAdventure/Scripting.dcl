@@ -33,5 +33,5 @@ changeFireScript	:: Task ()
 changeFloodScript 	:: Task ()
 changeSmokeScript 	:: Task ()
 
-interperScript 		::  (RoomNumber,Detector) User [Script] -> Task Bool
+interperScript 		::  (RoomNumber, RoomStatus) User [Script] -> Task Bool
 
