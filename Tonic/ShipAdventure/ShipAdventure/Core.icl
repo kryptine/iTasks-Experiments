@@ -298,7 +298,8 @@ simulateHandlingWithObject startLoc object objectLoc alarmLoc status actor mySta
   >>= \objectReached -> if objectReached (pickupObject objectLoc object actor myActorMap myInventoryMap
   >>= \actor ->                          autoMove objectLoc alarmLoc shipShortestPath actor myStatusMap myActorMap dungeonMap
   >>= \targetReached -> if targetReached (useObject alarmLoc object actor myActorMap
-  >>= \actor ->                          setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap @! True)
+  >>= \(actor, used) -> if used          (setAlarm actor.userName (alarmLoc, NormalStatus) myStatusMap @! True)
+                                         (return False))
                                          (return False))
                                          (return False)
 

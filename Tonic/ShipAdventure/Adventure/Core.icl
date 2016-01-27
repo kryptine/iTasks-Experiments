@@ -238,10 +238,15 @@ dropObject roomNumber object actor shRoomActorMap shRoomInventoryMap
   >>| updateActor roomNumber actor` shRoomActorMap @! actor`
 
 useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a))
-          -> Task (Actor o a) | iTask o & iTask a & Eq o
+          -> Task (Actor o a, Bool) | iTask o & iTask a & Eq o
 useObject roomNumber object actor shRoomActorMap
-  # actor` = {actor & carrying = removeObj object actor.carrying}
-  = updateActor roomNumber actor` shRoomActorMap @! actor`
+  | hasObj object actor
+    # actor` = {actor & carrying = removeObj object actor.carrying}
+    = updateActor roomNumber actor` shRoomActorMap @! (actor`, True)
+  | otherwise = return (actor, False)
+
+hasObj :: !(Object o) !(Actor o a) -> Bool
+hasObj obj actor = length [0 \\ obj` <- actor.carrying | obj.objId == obj`.objId] > 0
 
 removeObj :: !(Object o) ![Object o] -> [Object o]
 removeObj obj objs = [obj` \\ obj` <- objs | obj.objId <> obj`.objId ]
