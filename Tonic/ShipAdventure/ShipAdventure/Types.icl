@@ -100,11 +100,15 @@ manageDevices kitchen
                  viewSharedInformation "Device network" [ViewWith ppNetwork] myNetwork
                 ) @! ()
 
+  ppNetwork :: !Network -> ((String, [(String, [PPDevice])]), (String, [Cable]))
   ppNetwork network = (devicesView, cablesView)
     where
+    cablesView :: (String, [Cable])
     cablesView = ("Cables", 'DIS'.elems network.cables)
+
+    devicesView :: (String, [(String, [PPDevice])])
     devicesView = ( "Devices"
-                  , [  ("Room " +++ toString roomNo, map toPPDevice devices`)
+                  , [  ("Room " +++ toString roomNo, [toPPDevice d \\ d <- devices` | not (isDetector d.Device.deviceType.DeviceType.kind)])
                     \\ (roomNo, devices`) <- 'DIS'.toList network.devices
                     ]
                   )
@@ -327,10 +331,10 @@ myNetwork = sharedStore "myNetwork"
                                   ]
   }
 
-cutCable :: RoomNumber CableId Network -> Network
+cutCable :: !RoomNumber !CableId !Network -> Network
 cutCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) False op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
 
-patchCable :: RoomNumber CableId Network -> Network
+patchCable :: !RoomNumber !CableId !Network -> Network
 patchCable roomNo cableId network = { network & cableMapping = 'DIS'.alter (fmap (\xs -> [(if (no == roomNo) True op, no) \\ (op, no) <- xs])) cableId network.cableMapping }
 
 inventoryInRoomShare :: RWShared RoomNumber (IntMap MyObject) (IntMap MyObject)
@@ -364,8 +368,7 @@ setRoomDetectors :: Task ()
 setRoomDetectors
   = ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
     -||
-    (viewSharedInformation "Status map" [] myStatusMap -||
-    manageDevices True <<@ ArrangeHorizontal)) <<@ ArrangeHorizontal <<@ FullScreen)
+    manageDevices True <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen)
     >>* [OnValue (\tv -> case tv of
                            Value (SetRoomStatus selRoom st) _ -> Just (setRoomStatus selRoom st myStatusMap >>| setRoomDetectors)
                            Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)

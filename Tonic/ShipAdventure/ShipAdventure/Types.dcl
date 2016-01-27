@@ -80,11 +80,11 @@ derive gLexOrd CableType
 derive class iTask ObjectType, ActorStatus, Availability, DeviceType, RoomStatus
 derive class iTask Cable, Priority, MapClick, Network, Device, CableType, DeviceKind
 
-instance ==       ObjectType
-instance ==       Priority
+instance == ObjectType
+instance == Priority
+instance == CableType
 
 instance <  CableType
-instance == CableType
 
 instance toString ObjectType
 instance toString Exit
@@ -107,18 +107,18 @@ allAvailableActors :: ReadOnlyShared [(RoomNumber, MyActor)]
 
 // setting and resetting of the detection systems:
 
-setAlarm 		:: User (RoomNumber, RoomStatus) (Shared MyRoomStatusMap) -> Task ()
+setAlarm         :: User (RoomNumber, RoomStatus) (Shared MyRoomStatusMap) -> Task ()
 
 // making images from a map
 
-showMap 			:: Task MapClick
-setRoomDetectors 	:: Task ()
+showMap          :: Task MapClick
+setRoomDetectors :: Task ()
 
 roomImage :: !RoomExitLockMap !MyRoomInventoryMap !MyRoomStatusMap !MyRoomActorMap !Network !Bool !(Maybe Room) !*TagSource -> Image (a, MapClick)
 
-cutCable :: RoomNumber CableId Network -> Network
+cutCable   :: !RoomNumber !CableId !Network -> Network
+patchCable :: !RoomNumber !CableId !Network -> Network
 
-patchCable :: RoomNumber CableId Network -> Network
 manageDevices :: Bool -> Task ()
 
 hasFire :: !RoomStatus -> Bool

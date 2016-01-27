@@ -106,10 +106,11 @@ autoMove :: RoomNumber RoomNumber
             (Actor o a) (Shared (RoomStatusMap r)) (Shared (RoomActorMap o a)) DungeonMap
          -> Task Bool | iTask r & iTask o & iTask a & Eq o
 pickupObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
-             -> Task Bool | iTask o & iTask a & Eq o
+             -> Task (Actor o a) | iTask o & iTask a & Eq o
 dropObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) (Shared (RoomInventoryMap o))
-           -> Task Bool | iTask o & iTask a & Eq o
-useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a)) -> Task Bool | iTask o & iTask a & Eq o
+           -> Task (Actor o a) | iTask o & iTask a & Eq o
+useObject :: RoomNumber (Object o) (Actor o a) (Shared (RoomActorMap o a))
+          -> Task (Actor o a) | iTask o & iTask a & Eq o
 getObjectOfType :: (Actor o a) o -> Object o | iTask o & iTask a
 
 // given a shortest path algorithm, the current location and the kind of object one searches for
