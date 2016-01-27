@@ -360,22 +360,27 @@ where
 // detectors setting
 
 // setting and resetting of the detection systems
-
 setRoomDetectors :: Task ()
-setRoomDetectors 
-	= ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
-      >>* [OnValue (\tv -> case tv of
-                             Value (SetRoomStatus selRoom st) _ -> Just (updRoomStatus selRoom (const st) myStatusMap >>| setRoomDetectors)
-                             Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
-                             _ -> Nothing
-                   )])
-      -||
-      manageDevices True <<@ ArrangeHorizontal) <<@ ArrangeHorizontal <<@ FullScreen
+setRoomDetectors
+  = ((updateInformationWithShared "Map Status" [imageUpdate id (mapImage True myMap) (\_ _ -> Nothing) (const snd)] (exitLockShare |+| myInventoryMap |+| myStatusMap |+| myActorMap |+| myNetwork) NoMapClick
+    -||
+    (viewSharedInformation "Status map" [] myStatusMap -||
+    manageDevices True <<@ ArrangeHorizontal)) <<@ ArrangeHorizontal <<@ FullScreen)
+    >>* [OnValue (\tv -> case tv of
+                           Value (SetRoomStatus selRoom st) _ -> Just (setRoomStatus selRoom st myStatusMap >>| setRoomDetectors)
+                           Value (ToggleDoor selRoom exit) _ -> Just (toggleExit selRoom exit myMap >>| setRoomDetectors)
+                           _ -> Nothing
+                 )]
+
 
 setAlarm :: User (RoomNumber, RoomStatus) (Shared MyRoomStatusMap) -> Task ()
 setAlarm user (alarmLoc, status) shStatusMap
-  =   updRoomStatus alarmLoc (const status) shStatusMap
-  >>| addLog user ""  ("Resets " <+++ status <+++ " in Room " <+++ alarmLoc <+++ " to False.") 
+  =   setRoomStatus alarmLoc status shStatusMap
+  >>| addLog user ""  ("Resets " <+++ status <+++ " in Room " <+++ alarmLoc <+++ " to False.")
+
+setRoomStatus :: RoomNumber RoomStatus (Shared (RoomStatusMap RoomStatus)) -> Task ()
+setRoomStatus roomNumber status statusMap
+  = upd ('DIS'.put roomNumber status) statusMap @! ()
 
 hasFire :: !RoomStatus -> Bool
 hasFire HasSmallFire  = True
@@ -512,12 +517,8 @@ roomImage` inventoryMap statusMap actorMap network mngmnt zoomed exitLocks room=
   #! bgHeight        = multiplier * roomDim * heightMul
   #! bg              = rect (px bgWidth) (px bgHeight) <@< { fill = toSVGColor "white" }
   #! bg              = bg <@< { onclick = onClick (SelectRoom number), local = False }
-  #! roomStatus      = case 'DIS'.get number statusMap of
-                         Just roomStatus = [roomStatus]
-                         _
-                         | mngmnt    = [HasSomeWater, HasSmoke, HasSmallFire]
-                         | otherwise = []
-  #! statusBadges    = above (repeat AtMiddleX) [] (foldr (mkStatusBadge number mngmnt multiplier) [] roomStatus) Nothing
+  #! roomStatus      = fromMaybe NormalStatus ('DIS'.get number statusMap)
+  #! statusBadges    = above (repeat AtMiddleX) [] (foldr (mkStatusBadge roomStatus number mngmnt multiplier) [] [HasSomeWater, HasSmoke, HasSmallFire]) Nothing
   #! actors          = case 'DIS'.get number actorMap of
                          Just actors -> actors
                          _           -> []
@@ -583,13 +584,13 @@ mkUpDown roomNo e exitLocks
            _      -> [(px 0.0, px -12.0), (px 12.0, px 0.0), (px 0.0, px 0.0)]
   = polygon Nothing ps <@< { opacity = if l 0.3 1.0 }
 
-mkStatusBadge :: Int !Bool !Real !RoomStatus ![Image (a, MapClick)] -> [Image (a, MapClick)]
-mkStatusBadge roomNo mngmnt badgeMult d acc
-  #! high = isHigh d
+mkStatusBadge :: !RoomStatus Int !Bool !Real !RoomStatus ![Image (a, MapClick)] -> [Image (a, MapClick)]
+mkStatusBadge activeRoomStatus roomNo mngmnt badgeMult roomStatus acc
+  #! high = activeRoomStatus === roomStatus
   | high || mngmnt
-    #! img = scale badgeMult badgeMult (mkStatusBadgeBackground d) <@< { opacity = if high 1.0 0.3 }
+    #! img = scale badgeMult badgeMult (mkStatusBadgeBackground roomStatus) <@< { opacity = if high 1.0 0.3 }
     #! img = if mngmnt
-               (img <@< { onclick = onClick (SetRoomStatus roomNo d), local = False })
+               (img <@< { onclick = onClick (SetRoomStatus roomNo roomStatus), local = False })
                img
     = [img : acc]
   | otherwise = acc

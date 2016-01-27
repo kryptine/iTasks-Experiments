@@ -349,10 +349,6 @@ getRoomFromMap roomNumber m
       []     -> Nothing
       status -> Just (hd status)
 
-updRoomStatus :: RoomNumber (r -> r) (Shared (RoomStatusMap r)) -> Task () | iTask r
-updRoomStatus roomNumber f smap
-  = upd ('DIS'.alter (fmap f) roomNumber) smap @! ()
-
 // utility functions to find things located in the map
 
 findActorRoom :: (Actor o a) (RoomActorMap o a) DungeonMap -> Maybe Room

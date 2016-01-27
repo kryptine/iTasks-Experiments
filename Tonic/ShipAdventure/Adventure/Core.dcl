@@ -92,10 +92,6 @@ updActorStatus :: User (a -> a) (Shared (RoomActorMap o a)) -> Task () | iTask a
 
 getRoomFromMap 	:: RoomNumber DungeonMap -> Maybe Room
 
-// update room status, unique room number is used as identification
-
-updRoomStatus :: RoomNumber (r -> r) (Shared (RoomStatusMap r)) -> Task () | iTask r
-
 toggleExit :: !RoomNumber !Exit !DungeonMap -> Task ()
 
 // shortest path calculation
