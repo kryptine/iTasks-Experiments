@@ -124,11 +124,12 @@ shortestPath cost startRoomNumber endRoomNumber statusMap exitLocks allRooms
     foldExits :: !(RoomStatusMap r) !(r -> Weight) !Distance !NodeIdx !Exit !(!Graph, !Heap (Distance, NodeIdx))
               -> (!Graph, !Heap (Distance, NodeIdx))
     foldExits statusMap cost minDist minIdx exit (graph, queue)
-      | 'DM'.get (minIdx, exit) exitLocks == Just False
+      | not (fromMaybe False ('DM'.get (minIdx, exit) exitLocks))
         #! exitNo = fromExit exit
-        = case ('DIS'.get exitNo graph, 'DIS'.get exitNo statusMap) of
-            (Just (nDist, nPrevIdx, nRoom), Just roomStatus)
-              #! alt = minDist + cost roomStatus
+        = case 'DIS'.get exitNo graph of
+            Just (nDist, nPrevIdx, nRoom)
+              #! roomCost = maybe 1 cost ('DIS'.get exitNo statusMap)
+              #! alt      = minDist + roomCost
               | alt < nDist
                 = ( 'DIS'.alter (fmap (\(_, _, r) -> (alt, minIdx, r))) nRoom.number graph
                   , 'DH'.insert (alt, nRoom.number) queue)
