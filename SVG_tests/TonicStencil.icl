@@ -41,7 +41,11 @@ Start world = startEngine examples world
 
 //Start = fst (fixSpans viewTaskDefExample` {srvTaggedSpanEnv = 'DM'.newMap, didChange = False, srvCounter = 0, srvFonts = 'DM'.newMap})
 
-viewImage d image = viewInformation d [imageView (\_ -> image)] ()
+viewImage :: d (Image ()) -> Task () | descr d
+viewImage d image = updateInformation d [imageUpdate id (\_ _ _ -> image) (const id) (const id) (\_ _ -> Nothing) (const id)] ()
+
+viewImageF :: d (a -> Image a) a -> Task a | descr d & iTask a
+viewImageF d f x  = updateInformation d [imageUpdate id (\_ x _ -> f x) (const id) (const id) (\_ _ -> Nothing) (const id)] x
 
 
 //viewTaskDefExample` = viExample
@@ -210,10 +214,13 @@ allClickExamples = allTasks [ // simpleClickExample @! ()
   //f n = rect (px n) (px n) <@< { onclick = \r -> r + 25.0 }
 
 doubleClickExample :: Task Real
-doubleClickExample = viewInformation "Simple doubleclick example" [imageView f] 25.0
+doubleClickExample = viewImageF "Simple doubleclick example" f 25.0
   where
   f :: Real -> Image Real
-  f n = rect (px n) (px n) <@< { ondblclick = \r -> r + 25.0 }
+  f n = rect (px n) (px n) <@< { onclick = cl, local = False }
+      where
+      cl 2 r = r + 25.0
+      cl _ r = r
 
 //simpleClickExample` :: Task Real
 //simpleClickExample` = updateInformation "Simple click example" [imageUpdate id f (\_ x -> x)] 25.0
