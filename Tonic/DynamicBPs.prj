@@ -31,6 +31,7 @@ Global
 	Link
 		LinkMethod:	Static
 		GenerateRelocations:	False
+		GenerateSymbolTable:	False
 		GenerateLinkMap:	False
 		LinkResources:	False
 		ResourceSource:	
@@ -2407,6 +2408,20 @@ OtherModules
 			ReuseUniqueNodes:	True
 			Fusion:	False
 	Module
+		Name:	iTasks._Framework.Tonic.Blueprints
+		Dir:	{Application}/lib/iTasks-SDK/Server
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	StrictExportTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
 		Name:	iTasks._Framework.Tonic.Images
 		Dir:	{Application}/lib/iTasks-SDK/Server
 		Compiler
@@ -2428,6 +2443,34 @@ OtherModules
 			NeverTimeProfile:	False
 			StrictnessAnalysis:	True
 			ListTypes:	NoTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
+		Name:	iTasks._Framework.Tonic.Server
+		Dir:	{Application}/lib/iTasks-SDK/Server
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	StrictExportTypes
+			ListAttributes:	True
+			Warnings:	True
+			Verbose:	True
+			ReadableABC:	False
+			ReuseUniqueNodes:	True
+			Fusion:	False
+	Module
+		Name:	iTasks._Framework.Tonic.Shares
+		Dir:	{Application}/lib/iTasks-SDK/Server
+		Compiler
+			NeverMemoryProfile:	False
+			NeverTimeProfile:	False
+			StrictnessAnalysis:	True
+			ListTypes:	StrictExportTypes
 			ListAttributes:	True
 			Warnings:	True
 			Verbose:	True

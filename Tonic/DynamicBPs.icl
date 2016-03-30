@@ -241,7 +241,7 @@ twoTasksTest = twoTasks (UserWithId "Alice") (UserWithId "Bob")
 //duoChat ::  User User  (Shared (String, String)) -> Task Void
 //duoChat  you me sharedNotes
  //=	                   chatWith you toView fromView sharedNotes
-    //-||- 
+    // -||- 
                 //(you @: chatWith me (toView o switch) (switch o fromView) sharedNotes)
 //where
      //toView 	  (you, me) 				= (Display you, Note me)

@@ -82,7 +82,8 @@ where
 
 play :: !(!Color,!String) !(Shared GameSt) -> Task (Color,String)
 play (me,name) game_st
-    =   updateSharedInformation name [imageUpdate id (player_perspective me) (\_ _ -> Nothing) (const id)] game_st
+    =   updateSharedInformation name
+          [imageUpdate id (const (player_perspective me)) (const id) (const id) (\_ _ -> Nothing) (const id)] game_st
     >>* [OnValue (withValue (\gameSt -> determine_winner gameSt
                             >>= \winner -> return (accolades winner me game_st >>| return winner)))]
     //>>* [OnValue (withValue (game_over color game_st))]
@@ -117,7 +118,9 @@ game_over me game_st gameSt
 
 accolades :: !(!Color,!String) !Color !(Shared GameSt) -> Task GameSt
 accolades winner me game_st
-	= viewSharedInformation ("The winner is " <+++ winner) [imageView (player_perspective me) (\_ _ -> Nothing)] game_st
+	= updateSharedInformation ("The winner is " <+++ winner)
+        [imageUpdate id (const (player_perspective me)) (const id) (const id) (\_ _ -> Nothing) (const id)]
+        game_st
 
 // Image definitions:
 // these have been taken from a 'real' physical card game of Ligretto, dimensions to be interpreted as mm
@@ -205,14 +208,13 @@ players_image r color players
            )
 
 name_image :: !Player -> Image m
-name_image {name,color}
+name_image {Player | name,color}
+ # width  = card_height *. 1.8
+ # height = card_width  *. 0.4
  = overlay [(AtMiddleX,AtMiddleY)] []
-     [text {cardfont 16.0 & fontweight = "bold"} name <@< {fill = if (color === Yellow) black white}]
-     (Just (rect width height <@< {fill = toSVGColor color}))
-     <@< {mask = rect width height <@< {fill = white} <@< {stroke = white}}
-where
-	width  = card_height *. 1.8
-	height = card_width  *. 0.4
+     [text {FontDef | cardfont 16.0 & fontweight = "bold"} name <@< { FillAttr | fill = if (color === Yellow) black white}]
+     (Just (rect width height <@< { FillAttr | fill = toSVGColor color}))
+     <@< { MaskAttr | mask = rect width height <@< { FillAttr | fill = white} <@< { StrokeAttr | stroke = white}}
 
 names_image :: !Span ![Player] -> Image m
 names_image r players = circular r (2.0*pi) (map name_image players)
