@@ -1,0 +1,328 @@
+<html>
+<head>
+<script type="text/javascript" src="utils.js"></script>
+<script type="text/javascript" src="builtin.js"></script>
+<script type="text/javascript" src="sapl.js"></script>
+<script type="text/javascript" src="debug.js"></script>
+<script type="text/javascript" src="clean.js"></script>
+<script type="text/javascript">
+
+var ineventhandler = false;
+
+function walkDOM(el, f){
+	var node = el.firstChild;
+	while(node){
+		f(node);
+		node = node.nextSibling;
+	}
+}
+
+function patchByLines(lines, el){
+	// Create strictlist from line array
+	var ls = __StrictList_SNil();
+	for(var i = lines.length-1; i>=0; i--)
+			ls =  __StrictList_SCons(lines[i], ls);	
+	
+	
+	// Create token/color array	from lines
+	var ts = Sapl.toJS(__Highlighter_genAnnotations(__syncol_firstParse(ls)));
+	var as = []
+	for(var i=0; i<ts.length; i++){
+		for(var j=0; j<ts[i].length; j++){
+			if(ts[i][j][0] != "")
+				as.push([ts[i][j][0],ts[i][j][1][0]]);
+		}
+		if(i!=ts.length-1) as.push([]);
+	}	
+	
+	// apply patch
+	patch(el, as);	
+}
+
+function fromTextarea(elid){
+	var el = document.getElementById(elid);
+	var source = el.value;
+	var lines = source.split("\n");
+
+	var div = document.createElement("DIV");
+	div.setAttribute("style","font-family: courier, monospace; white-space: pre; tab-size: 4; -moz-tab-size: 4; -o-tab-size: 4;");	
+	div.contentEditable = true;
+	
+	patchByLines(lines, div);
+
+	div.addEventListener('keyup',onchange,false);
+	el.parentNode.replaceChild(div, el);
+}
+
+function onchange(e){
+
+	if(ineventhandler){
+		return false;
+	}else{
+		ineventhandler = true;
+	}
+
+	var div = e.target;
+	flattenDOM(div); // ensure invariant	
+	var pos = getCursorPos(div);
+	
+	var lines = findLines(div);
+	
+	patchByLines(lines, div);
+	setCursorPos(div, pos);
+	
+	ineventhandler = false;
+}
+
+function findLines(el){
+	var lines = [], line = "";
+	
+	walkDOM(el, function(node){
+		if(isSpan(node)){
+			line = line + (node.firstChild?node.firstChild.nodeValue:"");
+		}else if(isBr(node)){
+			if(node.type != "moz") lines.push(line);
+			line="";
+		}
+	});
+
+	if(line != "") lines.push(line);
+	return lines;
+}
+
+function getSNode(){
+	var sel = window.getSelection();
+	
+	if(sel.rangeCount){
+		var node = sel.getRangeAt(0).startContainer;
+		if(isTokenNode(node.parentNode)) node = node.parentNode;
+		return node;
+	}else{
+		return null;
+	}
+}
+
+function getRangeOffs(){
+	return window.getSelection().getRangeAt(0).startOffset;
+}
+
+function moveCursor(el, offset){
+	var sel = window.getSelection();
+	var range = document.createRange();
+	range.setStart(el, offset);
+	range.collapse(true);
+	sel.removeAllRanges();
+	sel.addRange(range);
+}
+
+function isDiv(el){
+	return el && el.nodeName == "DIV";
+}
+
+function isSpan(el){
+	return el && el.nodeName == "SPAN";
+}
+
+function isBr(el){
+	return el && el.nodeName == "BR";
+}
+
+function isTokenNode(el){
+	return el && isSpan(el) && el.childNodes.length == 1 && el.firstChild.nodeType == 3;
+}
+
+function liftChildren(el){
+	var parent = el.parentNode;
+	var node = el.firstChild;
+	var first = null;
+		
+	// Don't lift its inner #text node
+	if(isTokenNode(el)) return null;
+	// This #div generates a new line as well
+	if(isDiv(el) && el.previousSibling && !isBr(el.previousSibling)) 
+			first = parent.insertBefore(document.createElement("BR"), el);
+	
+	while(node){
+		var saved = node;
+		node = liftChildren(node);
+		if(!node) node = saved;
+
+		// recheck again after lifting
+		var snode = getSNode();
+		var soffs = getRangeOffs();
+		var cnode;
+		if(snode == el) cnode = el.childNodes[soffs];		
+		
+		var next = node.nextSibling;	
+		if(!first) first = node;		
+		parent.insertBefore(node, el);
+		
+		// the lifted node or the omitted node was/is selected
+		if(cnode == saved || cnode == node){
+			var soffs = Array.prototype.indexOf.call(parent.childNodes, node);
+			moveCursor(parent, soffs);
+		
+		// refresh the "range" according to the new hierarchy
+		}else if(snode == node){
+			moveCursor(node, soffs);
+		}
+		
+		node = next;
+	}
+	
+	if(first) parent.removeChild(el);
+	return first;
+}
+
+/* 
+ * ensure invariant:
+ *  - only #br and #span with an only #text child are allowed
+ *  - spanless #text nodes are merged into the previous #span (if any) (chrome behavior)
+ *  - maintaines cursor position during DOM restucture
+ */
+
+function flattenDOM(el){
+	walkDOM(el, function(node){liftChildren(node);});
+	
+	var snode = getSNode();
+	var soffs = getRangeOffs();
+	
+	var node = el.firstChild;
+	while(node){
+		var next = node.nextSibling;
+	
+		// Firefox case. Emulate Chrome behavior, 
+		// merge the #text node into the previous #span
+		if(node.nodeType == 3){
+			var prev = node.previousSibling;
+			if(isTokenNode(prev)){
+				var l = prev.firstChild.nodeValue.length;
+				prev.firstChild.nodeValue += node.nodeValue;
+				el.removeChild(node);
+				if(node == snode) moveCursor(prev.firstChild, l+soffs);
+			}else{
+				var s = document.createElement("SPAN");
+				var c = node.cloneNode(true);
+				s.appendChild(c);
+				node = el.replaceChild(s, node);
+				if(node == snode) moveCursor(c, soffs);
+			}
+		}
+		node = next;
+	}	
+}
+
+function patch(el, as){
+	for(var i=0; i<el.childNodes.length; i++){
+		var node = el.childNodes[i];				
+		var should_nl = as.length >0 && as[0].length == 0;
+
+		if(as.length==0){
+			// Don't remove #br nodes from end of the source code
+			if(!isBr(node)){
+				el.removeChild(node);
+				i--;
+			}
+		}else if(isBr(node)){
+			if(should_nl){
+				as.shift();
+			}else{
+				var s=document.createElement("SPAN");
+				s.innerHTML = as[0][0];
+				s.style.color=as[0][1];
+				el.insertBefore(s,node);
+				as.shift();
+			}	
+		}else if(should_nl){
+			el.removeChild(node); i--;
+		}else{ // SPAN
+			if(node.firstChild.nodeValue != as[0][0]) node.firstChild.nodeValue = as[0][0];
+			if(node.style.color != as[0][1]) node.style.color = as[0][1];
+			as.shift();
+		}
+	}
+	
+	while(as.length != 0){
+		if(as[0].length == 0){
+			el.appendChild(document.createElement("BR"));
+		}else{
+			var s=document.createElement("SPAN");
+			s.innerHTML = as[0][0];
+			s.style.color=as[0][1];
+			el.appendChild(s);
+		}
+		as.shift();		
+	}	
+}
+
+function getCursorPos(el) {
+	var range = window.getSelection().getRangeAt(0);
+	
+	var stopnode;
+	var l = 0;
+	if(range.startContainer==el){
+		// in main container
+		stopnode = el.childNodes[range.startOffset].previousSibling;
+	}else{
+		// in #text node of a SPAN
+		l = range.startOffset;
+		stopnode = range.startContainer.parentElement.previousSibling;
+	}
+	if(!stopnode) return l;	
+	
+	for(var i=0; i<el.childNodes.length; i++){
+		var node = el.childNodes[i];
+	
+		if(isBr(node)){
+			l += 1;
+		}else{ // SPAN
+			l += (node.firstChild?node.firstChild.nodeValue.length:0);
+		}	
+	
+		if(node == stopnode) return l;
+	}
+}
+
+function setCursorPos(el, pos){
+	for(var i=0; i<el.childNodes.length; i++){
+		var node = el.childNodes[i];
+		var al = 0;
+		
+		if(isBr(node)){
+			pos -= 1;
+		}else{
+			al = (node.firstChild?node.firstChild.nodeValue.length:0);
+			node = node.firstChild;
+		}
+		
+		if(pos<al){
+
+			if(isBr(node)){
+				moveCursor(el, i);
+			}else{			
+				moveCursor(node, Math.max(0,pos)); // TODO: check max
+			}
+			return;
+
+		}else{
+			pos -= al;
+		}
+		
+	}
+}
+
+</script>
+</head>
+<body onload="fromTextarea('in');">
+<textarea id="in">
+SavePrefsFile	:: !{#Char} !Prefs !*Files -> (!Bool, !*Files);
+SavePrefsFile	prefsPath prefs files
+	#! (opened, file, files)	=	fopen prefsPath FWriteText files
+	| not opened
+		=	(False, files)
+	#! options					=	WriteTable prefs
+	#! file						=	WriteOptionsFile PrefsFileVersion options file
+	=	fclose file files
+</textarea>
+</body>
+</html>

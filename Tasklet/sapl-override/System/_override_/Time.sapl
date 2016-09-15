@@ -1,0 +1,31 @@
+|| ?module? System.Time
+
+System.Time.localTime !world_0 = _localTime world_0
+System.Time.gmTime !world_0 = _localTime world_0
+System.Time.time !world_0 = _time world_0
+System.Time.gmTime !world_0 = _localTime world_0
+
+:: System.Time.Timestamp = System.Time.Timestamp !a1
+:: System.Time.Clock = System.Time.Clock !a1
+
+|| Converted Records
+:: System.Time._Tm = {System.Time.sec, System.Time.min, System.Time.hour, System.Time.mday, System.Time.mon, System.Time.year, System.Time.wday, System.Time.yday, System.Time.isdst}
+System.Time.get_sec_0 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a1)
+System.Time.get_min_1 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a2)
+System.Time.get_hour_2 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a3)
+System.Time.get_mday_3 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a4)
+System.Time.get_mon_4 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a5)
+System.Time.get_year_5 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a6)
+System.Time.get_wday_6 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a7)
+System.Time.get_yday_7 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a8)
+System.Time.get_isdst_8 rec = select rec (System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 a9 -> a9)
+System.Time.set_sec_0 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm val a2 a3 a4 a5 a6 a7 a8 a9)
+System.Time.set_min_1 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 val a3 a4 a5 a6 a7 a8 a9)
+System.Time.set_hour_2 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 val a4 a5 a6 a7 a8 a9)
+System.Time.set_mday_3 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 a3 val a5 a6 a7 a8 a9)
+System.Time.set_mon_4 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 a3 a4 val a6 a7 a8 a9)
+System.Time.set_year_5 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 a3 a4 a5 val a7 a8 a9)
+System.Time.set_wday_6 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 a3 a4 a5 a6 val a8 a9)
+System.Time.set_yday_7 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 a3 a4 a5 a6 a7 val a9)
+System.Time.set_isdst_8 rec val = select rec (System.Time._Tm  a1 a2 a3 a4 a5 a6 a7 a8 a9 -> System.Time._Tm a1 a2 a3 a4 a5 a6 a7 a8 val)
+

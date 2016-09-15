@@ -1,0 +1,12 @@
+.icon-sourcetree {
+    background-image: url('img/folders_explorer.png');
+}
+.icon-mainmodule {
+    background-image: url('img/application.png');
+}
+.icon-auxmodule {
+    background-image: url('img/plugin.png');
+}
+.icon-search {
+    background-image: url('img/find.png');
+}
