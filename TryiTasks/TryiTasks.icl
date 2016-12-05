@@ -1,5 +1,6 @@
 module TryiTasks
-import iTasks, Text
+import iTasks, Text, Text.HTML
+import iTasks.API.Extensions.Editors.Ace
 from StdFunc import o
 /**
 * This application let's you play with small iTask programs. It a sort of very minimal 'IDE'.
@@ -30,24 +31,19 @@ tryiTasks =
 	(withShared startCode
 		\scode ->			
 			(loadExample scode -&&- modifyCode scode) @ snd
-	) >^* [OnAction (Action "Build and Run" []) (hasValue buildAndRun)]
+	) >^* [OnAction (Action "Build and Run") (hasValue buildAndRun)]
 	@! () 
 
 loadExample :: (Shared String) -> Task ()
-/*
 loadExample scode = (forever (
-		enterChoice "Load example" [ChooseWith (ChooseFromComboBox fst)] examples @ snd
-		>>* [OnAction (Action "Load" []) (hasValue (\example -> set example scode))]
-	) @! ()) <<@ ForceLayout
-*/
+		enterChoice "Load example" [ChooseFromDropdown fst] examples @ snd
+		>>* [OnAction (Action "Load" ) (hasValue (\example -> set example scode))]
+	) @! ())
 
-loadExample scode = viewInformation "Load example" [] "Here should be the selection of examples but it messes up the buttons somehow :(" @! ()
+//loadExample scode = viewInformation "Load example" [] "Here should be the selection of examples but it messes up the buttons somehow :(" @! ()
 
 modifyCode :: (Shared String) -> Task String
-modifyCode scode = updateSharedInformation "Edit code" [UpdateWith toView fromView] scode
-where
-	toView s = Note s
-	fromView _ (Note s) = s
+modifyCode scode = updateSharedInformation "Edit code" [UpdateUsing id (const id) aceTextArea] scode
 
 buildAndRun :: String -> Task ()
 buildAndRun fragment = withTemporaryDirectory 
@@ -87,7 +83,7 @@ where
 
 	//"Here the generated executable will be run to test"
 	runExecutable buildDir
-		= 	callProcess "Your code is running" [ViewWith toView] (buildDir </> "test.exe") ["-port","8088"] (Just buildDir)
+		= 	callProcess "Your code is running" [ViewAs toView] (buildDir </> "test.exe") ["-port","8088"] (Just buildDir)
 	where
 		toView _ = ATag [HrefAttr "http://localhost:8088/",TargetAttr "_blank"] [Text "View the code at: http://localhost:8088"]
 
